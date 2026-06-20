@@ -57,6 +57,14 @@ class ReplayStore:
             raise FileNotFoundError(replay_id)
         return json.loads(path.read_text())
 
+    def find_by_episode(self, episode_id: int) -> ReplaySummary | None:
+        self.ensure()
+        for item in json.loads(self.index_path.read_text()):
+            summary = ReplaySummary.model_validate(item)
+            if summary.episodeId == episode_id and (self.replay_dir / f"{summary.id}.json").exists():
+                return summary
+        return None
+
     def save(
         self,
         replay: Any,

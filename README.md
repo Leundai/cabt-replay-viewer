@@ -93,14 +93,16 @@ is stale. The default cache window is 30 minutes:
 KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
 KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
 KAGGLE_LEADERBOARD_PAGE_SIZE=50
-KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=12
+KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
 KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=2
 KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=2
 ```
 
 Leaderboard refreshes also cache recent public submissions and episode IDs for
-the top ranked teams. The enrichment limits above keep the pull batch bounded;
-set the team limit to `0` to cache standings only.
+the top 50 teams by default. Public replay clicks are allowed only for episode
+IDs already present in that cached leaderboard snapshot. The enrichment limits
+above keep the pull batch bounded; set the team limit to `0` to cache standings
+only.
 
 Saved replay artifacts are publicly readable from the hosted replay library. Use
 local JSON drag/drop for private inspection, and only save/import replays that
@@ -119,7 +121,7 @@ KAGGLE_USERNAME
 KAGGLE_KEY
 KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
 KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
-KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=12
+KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
 KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=2
 KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=2
 ```

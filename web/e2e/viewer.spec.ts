@@ -10,6 +10,18 @@ const savedReplay = {
   createdAt: '2026-06-20T00:00:00Z',
 };
 
+const kaggleReplay = {
+  id: 'kaggle-9001',
+  name: 'TrustHub hiroingk vs The Debauchery Tea Party',
+  source: 'kaggle',
+  players: ['TrustHub hiroingk', 'The Debauchery Tea Party'],
+  actionCount: 12,
+  stateCount: 13,
+  createdAt: '2026-06-20T12:00:00Z',
+  episodeId: 9001,
+  submissionId: 111,
+};
+
 const leaderboardSnapshot = {
   competition: 'pokemon-tcg-ai-battle',
   entries: [
@@ -59,7 +71,7 @@ const leaderboardSnapshot = {
 };
 
 async function routeApi(page: Page) {
-  let imported = false;
+  let importedReplay: unknown | null = null;
 
   await page.route('**/api/admin/session', async (route) => {
     const token = route.request().headers()['x-cabt-admin-token'];
@@ -83,14 +95,29 @@ async function routeApi(page: Page) {
     });
   });
 
-  await page.route('**/api/kaggle/leaderboard**', async (route) => {
+  await page.route(/\/api\/kaggle\/leaderboard\/refresh(?:\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
         ...leaderboardSnapshot,
-        source: route.request().method() === 'POST' ? 'kaggle' : leaderboardSnapshot.source,
-        message: route.request().method() === 'POST' ? 'Leaderboard refreshed from Kaggle.' : leaderboardSnapshot.message,
+        source: 'kaggle',
+        message: 'Leaderboard refreshed from Kaggle.',
       }),
+    });
+  });
+
+  await page.route(/\/api\/kaggle\/leaderboard(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(leaderboardSnapshot),
+    });
+  });
+
+  await page.route('**/api/kaggle/leaderboard/episodes/9001/import**', async (route) => {
+    importedReplay = kaggleReplay;
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ replay: kaggleReplay }),
     });
   });
 
@@ -121,7 +148,7 @@ async function routeApi(page: Page) {
   });
 
   await page.route('**/api/replays/import', async (route) => {
-    imported = true;
+    importedReplay = savedReplay;
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ replay: savedReplay }),
@@ -133,14 +160,15 @@ async function routeApi(page: Page) {
       await route.fallback();
       return;
     }
-    if (route.request().url().endsWith('/api/replays/upload-cabt-match/artifact')) {
+    const url = route.request().url();
+    if (url.endsWith('/api/replays/upload-cabt-match/artifact') || url.endsWith('/api/replays/kaggle-9001/artifact')) {
       await route.fulfill({
         contentType: 'application/json',
         path: 'public/game-logs/cabt-match.json',
       });
       return;
     }
-    await fulfillReplays(route, imported ? [savedReplay] : []);
+    await fulfillReplays(route, importedReplay ? [importedReplay] : []);
   });
 }
 
@@ -313,8 +341,19 @@ test('Cached leaderboard is visible without exposing admin controls', async ({ p
   await expect(page.getByText('1307.9').first()).toBeVisible();
   await expect(page.getByText('Submission #111')).toBeVisible();
   await expect(page.getByText('Replay 9001')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Replay 9001' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Replay 9001' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Load submissions' })).toHaveCount(0);
+  await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toHaveCount(0);
+});
+
+test('Cached leaderboard replay opens without admin unlock', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Replay 9001' }).click();
+  await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
+  await expect(page.getByLabel('Action step')).toHaveValue('0');
+  await expect(page.getByText('TrustHub hiroingk vs The Debauchery Tea Party')).toBeVisible();
   await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toHaveCount(0);
 });
 

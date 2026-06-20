@@ -159,3 +159,12 @@ export async function importKaggleEpisode(episodeId: number): Promise<ReplaySumm
   );
   return body.replay;
 }
+
+export async function importCachedLeaderboardEpisode(competition: string, episodeId: number): Promise<ReplaySummary> {
+  const params = new URLSearchParams({ competition });
+  const body = await apiJson<ImportReplayResponse>(
+    `/api/kaggle/leaderboard/episodes/${encodeURIComponent(String(episodeId))}/import?${params}`,
+    { method: 'POST', body: '{}' },
+  );
+  return body.replay;
+}

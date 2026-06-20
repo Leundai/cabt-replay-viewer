@@ -3,6 +3,7 @@
   import {
     getKaggleLeaderboard,
     getReplayArtifact,
+    importCachedLeaderboardEpisode,
     importKaggleEpisode,
     kaggleStatus,
     listKaggleEpisodes,
@@ -45,6 +46,7 @@
   let leaderboard = $state<KaggleLeaderboardSnapshot | null>(null);
   let leaderboardLoading = $state(false);
   let leaderboardError = $state('');
+  let leaderboardReplayLoadingId = $state<number | null>(null);
 
   let adminPassword = $state('');
   let adminControlVisible = $state(false);
@@ -243,6 +245,22 @@
     }
   }
 
+  async function openCachedLeaderboardEpisode(episodeId: number) {
+    leaderboardReplayLoadingId = episodeId;
+    leaderboardError = '';
+    try {
+      const fetched = await importCachedLeaderboardEpisode(leaderboard?.competition || competition.trim() || defaultCompetition, episodeId);
+      const artifact = await getReplayArtifact(fetched.id);
+      const saved = await localReplayStore.save(artifact, fetched.name);
+      await refreshLibrary();
+      await openStoredReplay(saved.id);
+    } catch (error) {
+      leaderboardError = error instanceof Error ? error.message : String(error);
+    } finally {
+      leaderboardReplayLoadingId = null;
+    }
+  }
+
   function filterSubmissions(items: KaggleSubmission[], query: string): KaggleSubmission[] {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {
@@ -437,19 +455,14 @@
                     {#if submission.episodes?.length}
                       <div class="leaderboard-episodes">
                         {#each submission.episodes as episode}
-                          {#if adminUnlocked}
-                            <button
-                              type="button"
-                              class="episode-pill"
-                              onclick={() => openKaggleEpisode(episode.id)}
-                            >
-                              Replay {episode.id}
-                            </button>
-                          {:else}
-                            <span class="episode-pill locked" title="Admin token required">
-                              Replay {episode.id}
-                            </span>
-                          {/if}
+                          <button
+                            type="button"
+                            class="episode-pill"
+                            disabled={leaderboardReplayLoadingId !== null}
+                            onclick={() => openCachedLeaderboardEpisode(episode.id)}
+                          >
+                            {leaderboardReplayLoadingId === episode.id ? 'Opening...' : `Replay ${episode.id}`}
+                          </button>
                         {/each}
                       </div>
                     {/if}
@@ -840,12 +853,6 @@
     font-size: 11px;
     font-weight: 850;
     line-height: 1.2;
-  }
-
-  .episode-pill.locked {
-    border-color: var(--surface-inset-border);
-    background: var(--surface-card-bg);
-    color: var(--text-secondary);
   }
 
   .replay-open,

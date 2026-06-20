@@ -199,6 +199,14 @@ def stale_leaderboard_snapshot(snapshot: KaggleLeaderboardSnapshot, message: str
     return snapshot.model_copy(update={"source": "stale" if snapshot.entries else "empty", "stale": True, "refreshInSeconds": 0, "message": message})
 
 
+def find_cached_leaderboard_submission(snapshot: KaggleLeaderboardSnapshot, episode_id: int) -> int | None:
+    for entry in snapshot.entries:
+        for submission in entry.submissions:
+            if any(episode.id == episode_id for episode in submission.episodes):
+                return submission.id
+    return None
+
+
 async def read_limited_json_body(request: Request) -> Any:
     body = bytearray()
     async for chunk in request.stream():
@@ -313,6 +321,26 @@ async def kaggle_submissions(
 async def kaggle_episodes(submission_id: int, _admin: None = Depends(require_admin)) -> dict[str, object]:
     episodes = await kaggle.list_episodes(submission_id)
     return {"episodes": [item.model_dump() for item in episodes]}
+
+
+@app.post("/api/kaggle/leaderboard/episodes/{episode_id}/import")
+async def import_cached_leaderboard_episode(
+    episode_id: int,
+    competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
+) -> dict[str, object]:
+    snapshot = await get_leaderboard_snapshot(competition, refresh_if_stale=True)
+    submission_id = find_cached_leaderboard_submission(snapshot, episode_id)
+    if submission_id is None:
+        raise HTTPException(status_code=404, detail="Episode is not available in the cached leaderboard.")
+
+    existing = store.find_by_episode(episode_id)
+    if existing:
+        return {"replay": existing.model_dump()}
+
+    replay = await kaggle.get_replay(episode_id)
+    encoded = validate_replay_payload(replay)
+    summary = store.save(replay, encoded=encoded, source="kaggle", episode_id=episode_id, submission_id=submission_id)
+    return {"replay": summary.model_dump()}
 
 
 @app.post("/api/kaggle/episodes/{episode_id}/import", dependencies=[Depends(require_admin)])

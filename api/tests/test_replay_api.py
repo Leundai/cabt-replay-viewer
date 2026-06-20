@@ -203,6 +203,68 @@ def test_leaderboard_admin_refresh_requires_token(tmp_path, monkeypatch):
     assert blocked.status_code == 403
 
 
+def test_cached_leaderboard_episode_can_be_imported_publicly(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr(store, "root", tmp_path)
+    monkeypatch.setattr(store, "replay_dir", tmp_path / "replays")
+    monkeypatch.setattr(store, "index_path", tmp_path / "index.json")
+    leaderboard_cache.save(
+        "pokemon-tcg-ai-battle",
+        [
+            KaggleLeaderboardEntry(
+                rank=1,
+                teamId=123,
+                teamName="Alpha",
+                score="100.0",
+                submissions=[KaggleSubmission(id=111, episodes=[KaggleEpisode(id=9001, submissionId=111)])],
+            )
+        ],
+        page_size=50,
+    )
+    calls = []
+
+    async def fake_get_replay(episode_id: int):
+        calls.append(episode_id)
+        return {
+            "title": "Cached leaderboard replay",
+            "info": {"TeamNames": ["Alpha", "Beta"]},
+            "steps": [[{"visualize": []}, {"action": []}]],
+        }
+
+    monkeypatch.setattr("api.app.main.kaggle.get_replay", fake_get_replay)
+
+    client = TestClient(app)
+    first = client.post("/api/kaggle/leaderboard/episodes/9001/import")
+    second = client.post("/api/kaggle/leaderboard/episodes/9001/import")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["replay"]["id"] == "kaggle-9001"
+    assert first.json()["replay"]["episodeId"] == 9001
+    assert first.json()["replay"]["submissionId"] == 111
+    assert calls == [9001]
+
+
+def test_uncached_leaderboard_episode_cannot_be_imported_publicly(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    leaderboard_cache.save(
+        "pokemon-tcg-ai-battle",
+        [KaggleLeaderboardEntry(rank=1, teamId=123, teamName="Alpha", score="100.0")],
+        page_size=50,
+    )
+
+    async def fake_get_replay(episode_id: int):
+        raise AssertionError("uncached episode should not be fetched")
+
+    monkeypatch.setattr("api.app.main.kaggle.get_replay", fake_get_replay)
+
+    client = TestClient(app)
+    response = client.post("/api/kaggle/leaderboard/episodes/9001/import")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Episode is not available in the cached leaderboard."
+
+
 def test_rejects_non_replay_payload(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "root", tmp_path)
     monkeypatch.setattr(store, "replay_dir", tmp_path / "replays")
