@@ -14,6 +14,7 @@
     type ReplaySummary,
   } from '../api/client';
   import { localReplayStore } from '../../state/localReplayStore';
+  import { MAX_REPLAY_BYTES } from '../../state/replaySources';
 
   const defaultCompetition = 'pokemon-tcg-ai-battle';
 
@@ -103,6 +104,9 @@
     }
 
     try {
+      if (file.size > MAX_REPLAY_BYTES) {
+        throw new Error('Replay payload is too large.');
+      }
       const replayJson = JSON.parse(await file.text());
       try {
         const saved = await localReplayStore.save(replayJson, file.name);

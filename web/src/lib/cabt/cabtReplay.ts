@@ -1,4 +1,4 @@
-import { cabtStateToGameView, createReplayCabtCardCatalog, type CabtReplayAttackRow, type CabtReplayCardRow, type CabtViewCurrentState } from './cabtViewAdapter';
+import { cabtStateToGameView, createReplayCabtCardCatalog, type CabtReplayAttackRow, type CabtReplayCardRow, type CabtViewCurrentState, type CabtViewPlayerState, type CabtViewPokemonRef } from './cabtViewAdapter';
 import type { GameView, LogView } from '../game/types';
 import type { ReplaySnapshot, ReplayStep } from '../game/replay';
 import { replaceEnergySymbols } from '../game/energy';
@@ -56,6 +56,21 @@ type CabtRunnerJson = {
   steps?: Array<{ index?: number; action?: unknown; observation?: unknown }>;
 };
 
+const REPLAY_LIMITS = {
+  frames: 10_000,
+  logsPerFrame: 200,
+  players: 4,
+  active: 2,
+  bench: 8,
+  hand: 100,
+  deckCount: 300,
+  discard: 300,
+  prize: 20,
+  stadium: 4,
+  attachedCards: 100,
+  energyTypes: 100,
+};
+
 export type CabtReplayMetadata = {
   cardRows: CardRow[];
   attackRows: CabtReplayAttackRow[];
@@ -83,6 +98,7 @@ export function cabtReplayToSnapshot(input: unknown, metadata: CabtReplayMetadat
   if (!visualFrames.length) {
     throw new Error('CABT replay did not include visualize frames.');
   }
+  validateVisualizeFrames(visualFrames);
 
   const environment = replayEnvironment(input);
   const players = playerNames(input);
@@ -201,6 +217,75 @@ function framesFromKaggleSteps(steps: KaggleContext['steps']): CabtVisualizeFram
   return [];
 }
 
+function validateVisualizeFrames(frames: CabtVisualizeFrame[]): void {
+  assertArrayLength(frames, 'visualize frames', REPLAY_LIMITS.frames);
+  frames.forEach((frame, index) => {
+    if (!isRecord(frame.current)) {
+      throw new Error(`CABT replay frame ${index} is missing current state.`);
+    }
+    assertArrayLength(frame.logs, `frame ${index} logs`, REPLAY_LIMITS.logsPerFrame, true);
+    assertArrayLength(frame.current.players, `frame ${index} players`, REPLAY_LIMITS.players);
+    assertArrayLength(frame.current.stadium, `frame ${index} stadium`, REPLAY_LIMITS.stadium, true);
+    frame.current.players.forEach((player, playerIndex) => {
+      validatePlayerState(player, `frame ${index} player ${playerIndex}`);
+    });
+  });
+}
+
+function validatePlayerState(player: CabtViewPlayerState, label: string): void {
+  if (!isRecord(player)) {
+    throw new Error(`${label} state is invalid.`);
+  }
+  assertArrayLength(player.active, `${label} active`, REPLAY_LIMITS.active, true);
+  assertArrayLength(player.bench, `${label} bench`, REPLAY_LIMITS.bench, true);
+  assertArrayLength(player.discard, `${label} discard`, REPLAY_LIMITS.discard, true);
+  assertArrayLength(player.hand, `${label} hand`, REPLAY_LIMITS.hand, true);
+  assertArrayLength(player.prize, `${label} prize`, REPLAY_LIMITS.prize, true);
+  assertCount(player.benchMax, `${label} benchMax`, REPLAY_LIMITS.bench, true);
+  assertCount(player.deckCount, `${label} deckCount`, REPLAY_LIMITS.deckCount, true);
+  assertCount(player.handCount, `${label} handCount`, REPLAY_LIMITS.hand, true);
+  player.active?.forEach((pokemon, index) => validatePokemonRef(pokemon, `${label} active ${index}`));
+  player.bench?.forEach((pokemon, index) => validatePokemonRef(pokemon, `${label} bench ${index}`));
+}
+
+function validatePokemonRef(pokemon: CabtViewPokemonRef | null, label: string): void {
+  if (pokemon == null) {
+    return;
+  }
+  if (!isRecord(pokemon)) {
+    throw new Error(`${label} pokemon is invalid.`);
+  }
+  assertArrayLength(pokemon.energies, `${label} energy types`, REPLAY_LIMITS.energyTypes, true);
+  assertArrayLength(pokemon.energyCards, `${label} energy cards`, REPLAY_LIMITS.attachedCards, true);
+  assertArrayLength(pokemon.tools, `${label} tools`, REPLAY_LIMITS.attachedCards, true);
+  assertArrayLength(pokemon.preEvolution, `${label} evolution stack`, REPLAY_LIMITS.attachedCards, true);
+}
+
+function assertArrayLength(value: unknown, label: string, max: number, optional = false): asserts value is unknown[] {
+  if (value == null && optional) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} must be an array.`);
+  }
+  if (value.length > max) {
+    throw new Error(`${label} exceeds the ${max} item limit.`);
+  }
+}
+
+function assertCount(value: unknown, label: string, max: number, optional = false): void {
+  if (value == null && optional) {
+    return;
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) {
+    throw new Error(`${label} must be an integer from 0 to ${max}.`);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function replayEnvironment(input: unknown): NonNullable<KaggleContext['environment']> {
   const context = input as KaggleContext;
   return context.environment ?? context;
@@ -226,7 +311,7 @@ function frameToGameView(
 
 function playerNames(input: unknown): string[] {
   const names = replayEnvironment(input)?.info?.TeamNames;
-  return names?.length ? names : ['Player 1', 'Player 2'];
+  return names?.length ? names.slice(0, REPLAY_LIMITS.players).map((name) => String(name).slice(0, 80)) : ['Player 1', 'Player 2'];
 }
 
 function stepLabel(frame: CabtVisualizeFrame, index: number, metadata: CabtReplayMetadata, players: string[]): string {

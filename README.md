@@ -46,7 +46,7 @@ Run the API:
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-pip install -r api/requirements.txt
+pip install --require-hashes -r api/requirements.lock
 uvicorn api.app.main:app --reload
 ```
 
@@ -76,12 +76,12 @@ KAGGLE_USERNAME=your-kaggle-username
 KAGGLE_KEY=your-kaggle-api-key
 ```
 
-Browser-driven replay imports and Kaggle calls are admin-protected by default.
-Set `CABT_ADMIN_TOKEN` on the backend, then paste that token into the viewer's
-Kaggle panel when importing or saving replays. The token is held only in memory
-for the current page session. Local JSON drag/drop still opens in the browser
-without a token; saving it to the replay library requires admin access unless
-`CABT_ALLOW_PUBLIC_IMPORTS=true` is set for development.
+Kaggle calls are always admin-protected. Set `CABT_ADMIN_TOKEN` on the backend,
+then paste that token into the viewer's Kaggle panel when importing episodes.
+The token is held only in memory for the current page session. Local JSON
+drag/drop opens and saves in the browser without a token. The backend replay
+upload endpoint still requires admin access unless `CABT_ALLOW_PUBLIC_IMPORTS=true`
+is set for local development; that flag does not unlock Kaggle endpoints.
 
 Saved replay artifacts are publicly readable from the hosted replay library. Use
 local JSON drag/drop for private inspection, and only save/import replays that
@@ -103,6 +103,10 @@ KAGGLE_KEY
 Attach a Railway volume mounted at `/data` so imported replays survive
 redeploys. Without a volume the service still runs, but the replay library is
 ephemeral.
+
+The backend rejects replay payloads over `CABT_MAX_REPLAY_BYTES` (25 MB by
+default) and keeps at most `CABT_MAX_STORED_REPLAYS` artifacts (500 by default)
+in the file-backed replay store.
 
 The container listens on `$PORT` and defaults to `8080`. The service healthcheck
 is `/api/health`.

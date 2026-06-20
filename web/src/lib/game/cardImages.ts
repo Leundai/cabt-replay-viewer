@@ -14,6 +14,13 @@ export type CardImageInput = {
   fullName?: string;
 };
 
+const ALLOWED_IMAGE_URLS = [
+  'https://images.pokemontcg.io/',
+  'https://images.scrydex.com/pokemon/',
+  'https://pkmncards.com/wp-content/uploads/',
+  '/assets/',
+];
+
 export const setImageMap: Record<string, string | SetImageInfo> = {
   BASE: 'base1',
   JUNGLE: 'base2',
@@ -56,7 +63,7 @@ export const setImageMap: Record<string, string | SetImageInfo> = {
 
 export function resolveCardImageUrl(card: CardImageInput): string | undefined {
   if (card.imageUrl || card.cardImage) {
-    return card.imageUrl ?? card.cardImage;
+    return safeCardImageUrl(card.imageUrl ?? card.cardImage);
   }
   if (card.name === 'Unknown' || card.fullName === 'Unknown') {
     return undefined;
@@ -75,6 +82,13 @@ export function resolveCardImageUrl(card: CardImageInput): string | undefined {
     return `https://pkmncards.com/wp-content/uploads/${setInfo.id}_en_${paddedSetNumber}_std.png`;
   }
   return `https://images.pokemontcg.io/${setInfo.id}/${setNumber}.png`;
+}
+
+export function safeCardImageUrl(url: string | undefined): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  return ALLOWED_IMAGE_URLS.some((prefix) => url.startsWith(prefix)) ? url : undefined;
 }
 
 export function getSetImageInfo(setCode: string | undefined): SetImageInfo | undefined {

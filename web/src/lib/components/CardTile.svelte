@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CardView } from '../game/types';
   import { cardInspectorStore } from '../../state/cardInspector.svelte';
+  import { safeCardImageUrl } from '../game/cardImages';
 
   type Props = {
     card?: CardView;
@@ -34,7 +35,7 @@
 
   let failedImageUrl = $state('');
 
-  let imageUrl = $derived(faceDown ? '/assets/cardback.png' : (card?.imageUrl ?? card?.cardImage));
+  let imageUrl = $derived(faceDown ? '/assets/cardback.png' : safeCardImageUrl(card?.imageUrl ?? card?.cardImage));
   let lastImageUrl = $state<string | undefined>();
   let showImage = $derived(!!imageUrl && failedImageUrl !== imageUrl);
   let label = $derived(faceDown ? 'Card' : (card?.name ?? 'Empty'));

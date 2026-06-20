@@ -4,6 +4,9 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
+
+KAGGLE_ALLOWED_HOSTS = {"kaggle.com", "www.kaggle.com"}
 
 
 @dataclass(frozen=True)
@@ -27,6 +30,7 @@ class Settings:
     admin_token: str
     allow_public_imports: bool
     max_replay_bytes: int
+    max_stored_replays: int
 
 
 def load_settings() -> Settings:
@@ -35,12 +39,26 @@ def load_settings() -> Settings:
     return Settings(
         data_dir=data_dir,
         static_dir=static_dir,
-        kaggle_base_url=os.getenv("KAGGLE_BASE_URL", "https://www.kaggle.com").rstrip("/"),
+        kaggle_base_url=normalize_kaggle_base_url(os.getenv("KAGGLE_BASE_URL", "https://www.kaggle.com")),
         kaggle_credentials=load_kaggle_credentials(),
         admin_token=os.getenv("CABT_ADMIN_TOKEN", ""),
         allow_public_imports=os.getenv("CABT_ALLOW_PUBLIC_IMPORTS", "").lower() in {"1", "true", "yes"},
         max_replay_bytes=int(os.getenv("CABT_MAX_REPLAY_BYTES", str(25 * 1024 * 1024))),
+        max_stored_replays=int(os.getenv("CABT_MAX_STORED_REPLAYS", "500")),
     )
+
+
+def normalize_kaggle_base_url(raw_url: str) -> str:
+    parsed = urlparse(raw_url.strip())
+    allow_unsafe = os.getenv("CABT_ALLOW_UNSAFE_KAGGLE_BASE_URLS", "").lower() in {"1", "true", "yes"}
+    if parsed.scheme != "https":
+        if not allow_unsafe:
+            raise ValueError("KAGGLE_BASE_URL must use https.")
+    if parsed.hostname not in KAGGLE_ALLOWED_HOSTS and not allow_unsafe:
+        raise ValueError("KAGGLE_BASE_URL must point at kaggle.com.")
+    if parsed.params or parsed.query or parsed.fragment:
+        raise ValueError("KAGGLE_BASE_URL must not include params, query, or fragment.")
+    return raw_url.strip().rstrip("/")
 
 
 def load_kaggle_credentials() -> KaggleCredentials:

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { safeCardImageUrl } from '../game/cardImages';
   import { EASE_IN_OUT, EASE_OUT } from '../motion';
   import { cardMotionStore, type DrawIntent, type PlayIntent } from '../../state/cardMotion.svelte';
 
@@ -132,7 +133,7 @@
     const heroX = Math.min(Math.max(center.cx, halfW + margin), overlay.width - halfW - margin);
     const heroY = Math.min(Math.max(center.cy, halfH + margin), overlay.height - halfH - margin);
 
-    const art = intent.card?.imageUrl ?? intent.card?.cardImage;
+    const art = safeCardImageUrl(intent.card?.imageUrl ?? intent.card?.cardImage);
     const name = intent.card?.name;
     // Nothing meaningful to surface — skip the reveal entirely rather than
     // flashing a blank card or the literal word "Card".

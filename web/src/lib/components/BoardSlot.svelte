@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import CardTile from './CardTile.svelte';
+  import { safeCardImageUrl } from '../game/cardImages';
   import { energyIconSrc, pokemonTypeIconSrc, pokemonTypeLabelFor } from '../game/energyIcons';
   import type { PokemonSlotView } from '../game/types';
   import { cardSwap, pop, EASE_IN_OUT, EASE_OUT } from '../motion';
@@ -29,7 +30,7 @@
   let pokemonTypeIcon = $derived(pokemonTypeIconSrc(slot.pokemon?.cardType));
   let pokemonTypeLabel = $derived(pokemonTypeLabelFor(slot.pokemon?.cardType));
   let toolPreview = $derived(slot.tools[0]);
-  let toolPreviewImageUrl = $derived(toolPreview?.imageUrl ?? toolPreview?.cardImage);
+  let toolPreviewImageUrl = $derived(safeCardImageUrl(toolPreview?.imageUrl ?? toolPreview?.cardImage));
   let toolNames = $derived(slot.tools.map((tool) => tool.fullName || tool.name).join(', '));
   let failedToolImageUrl = $state('');
   let lastToolImageUrl = $state<string | undefined>();

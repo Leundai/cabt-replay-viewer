@@ -9,6 +9,7 @@ import {
   normalizeReplayPlaybackSpeed,
   type ReplayPlaybackSpeedId,
 } from './replayPlaybackModel';
+import { fetchReplaySource, readReplayJson, replayCandidates } from './replaySources';
 
 class ReplayStore {
   replay = $state<ReplaySnapshot | null>(null);
@@ -207,12 +208,12 @@ async function loadCabtReplay(id: string): Promise<ReplaySnapshot> {
   const failures: string[] = [];
   for (const url of candidates) {
     try {
-      const response = await fetch(url);
+      const response = await fetchReplaySource(url);
       if (!response.ok) {
         failures.push(`${url}: ${response.status}`);
         continue;
       }
-      return replayJsonToSnapshot(await response.json());
+      return replayJsonToSnapshot(await readReplayJson(response));
     } catch (error) {
       failures.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -229,27 +230,6 @@ async function replayJsonToSnapshot(input: unknown): Promise<ReplaySnapshot> {
   return cabtReplayToSnapshot(input, createCabtReplayMetadata(metadata.cardRows, metadata.attackRows));
 }
 
-function replayCandidates(id: string): string[] {
-  const params = typeof window === 'undefined' ? new URLSearchParams() : new URLSearchParams(window.location.search);
-  const replayUrl = params.get('replayUrl');
-  if (replayUrl) {
-    return [replayUrl];
-  }
-  const file = params.get('replay') || id;
-  if (/^https?:\/\//.test(file) || file.startsWith('/')) {
-    return [file];
-  }
-  return [
-    `/game-logs/${encodePath(file)}`,
-    `/cabt-artifacts/${encodePath(file)}`,
-    '/game-logs/cabt-match.json',
-    '/cabt-artifacts/cabt-match.json',
-  ];
-}
-
-function encodePath(path: string): string {
-  return path.split('/').map((part) => encodeURIComponent(part)).join('/');
-}
 
 function clampIndex(value: number, max: number): number {
   if (!Number.isFinite(value)) {

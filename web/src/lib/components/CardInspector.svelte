@@ -1,11 +1,12 @@
 <script lang="ts">
   import { cardInspectorStore } from '../../state/cardInspector.svelte';
+  import { safeCardImageUrl } from '../game/cardImages';
   import type { AttackView, CardView, PowerView } from '../game/types';
 
   let card = $derived(cardInspectorStore.card);
   let failedImageUrl = $state('');
   let lastImageUrl = $state<string | undefined>();
-  let imageUrl = $derived(card?.imageUrl ?? card?.cardImage);
+  let imageUrl = $derived(safeCardImageUrl(card?.imageUrl ?? card?.cardImage));
   let showImage = $derived(!!imageUrl && failedImageUrl !== imageUrl);
   let attacks = $derived(card?.attacks ?? []);
   let powers = $derived(card?.powers ?? []);

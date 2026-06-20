@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,12 +11,17 @@ from typing import Any
 
 from .models import ReplaySummary
 
+MAX_SUMMARY_TEXT_LENGTH = 160
+MAX_SUMMARY_PLAYERS = 4
+REPLAY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,96}$")
+
 
 class ReplayStore:
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, max_replays: int = 500):
         self.root = data_dir
         self.replay_dir = self.root / "replays"
         self.index_path = self.root / "index.json"
+        self.max_replays = max(1, max_replays)
         self._lock = threading.Lock()
 
     def ensure(self) -> None:
@@ -44,7 +50,9 @@ class ReplayStore:
 
     def get_artifact(self, replay_id: str) -> Any:
         self.ensure()
-        path = self.replay_dir / f"{safe_id(replay_id)}.json"
+        if not is_safe_id(replay_id):
+            raise FileNotFoundError(replay_id)
+        path = self.replay_dir / f"{replay_id}.json"
         if not path.exists():
             raise FileNotFoundError(replay_id)
         return json.loads(path.read_text())
@@ -64,9 +72,9 @@ class ReplayStore:
         replay_id = safe_id(f"{source}-{episode_id or digest}")
         summary = ReplaySummary(
             id=replay_id,
-            name=name or infer_replay_name(replay, replay_id),
+            name=bounded_text(name or infer_replay_name(replay, replay_id)),
             source=source,
-            players=infer_players(replay),
+            players=[bounded_text(player) for player in infer_players(replay)[:MAX_SUMMARY_PLAYERS]],
             actionCount=infer_action_count(replay),
             stateCount=infer_state_count(replay),
             createdAt=datetime.now(timezone.utc).isoformat(),
@@ -90,9 +98,16 @@ class ReplayStore:
             if item.get("id") != summary.id
         ]
         items.insert(0, summary)
+        pruned = items[self.max_replays :]
+        items = items[: self.max_replays]
         temp_path = self.index_path.with_suffix(".json.tmp")
         temp_path.write_text(json.dumps([item.model_dump() for item in items], indent=2))
         os.replace(temp_path, self.index_path)
+        for item in pruned:
+            try:
+                (self.replay_dir / f"{item.id}.json").unlink()
+            except FileNotFoundError:
+                pass
 
 
 def infer_replay_name(replay: Any, fallback: str) -> str:
@@ -162,4 +177,13 @@ def infer_state_count(replay: Any) -> int:
 
 
 def safe_id(value: str) -> str:
-    return "".join(char if char.isalnum() or char in "-_" else "-" for char in value).strip("-")[:96] or "replay"
+    return "".join(char if char.isascii() and (char.isalnum() or char in "-_") else "-" for char in value).strip("-")[:96] or "replay"
+
+
+def is_safe_id(value: str) -> bool:
+    return bool(REPLAY_ID_PATTERN.fullmatch(value))
+
+
+def bounded_text(value: Any, max_length: int = MAX_SUMMARY_TEXT_LENGTH) -> str:
+    text = str(value).strip()
+    return text[:max_length] or "Replay"

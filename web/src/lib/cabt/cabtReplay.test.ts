@@ -186,4 +186,25 @@ describe('cabtReplayToSnapshot', () => {
     expect(snapshot.players.map((player) => player.name)).toEqual(['Demo Green', 'Demo Fighting']);
     expect(snapshot.viewAt(0)?.players[1].active.pokemon?.name).toBe('Mega Lucario ex');
   });
+
+  it('rejects replay states that would expand unbounded UI arrays', () => {
+    expect(() => cabtReplayToSnapshot({
+      visualize: [{
+        current: {
+          turn: 1,
+          yourIndex: 0,
+          result: -1,
+          players: [{
+            active: [],
+            bench: [],
+            benchMax: 1_000_000,
+            hand: null,
+            handCount: 1_000_000,
+            deckCount: 0,
+            prize: [],
+          }],
+        },
+      }],
+    }, metadata)).toThrow('benchMax');
+  });
 });

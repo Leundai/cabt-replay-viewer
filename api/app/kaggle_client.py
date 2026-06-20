@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -10,9 +11,10 @@ from .settings import KaggleCredentials
 
 
 class KaggleClient:
-    def __init__(self, base_url: str, credentials: KaggleCredentials):
+    def __init__(self, base_url: str, credentials: KaggleCredentials, max_response_bytes: int):
         self.base_url = base_url
         self.credentials = credentials
+        self.max_response_bytes = max_response_bytes
 
     def status_message(self) -> str:
         if self.credentials.configured:
@@ -43,20 +45,42 @@ class KaggleClient:
         elif self.credentials.username and self.credentials.key:
             auth = httpx.BasicAuth(self.credentials.username, self.credentials.key)
 
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=45.0, follow_redirects=True) as client:
-            response = await client.get(path, params=params, headers=headers, auth=auth)
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=45.0, follow_redirects=False) as client:
+            async with client.stream("GET", path, params=params, headers=headers, auth=auth) as response:
+                raw = await self._read_limited_response(response)
 
         if response.status_code in (401, 403):
             raise HTTPException(status_code=response.status_code, detail="Kaggle authentication failed or is required for this endpoint.")
         if response.status_code == 404:
             raise HTTPException(status_code=404, detail="Kaggle resource was not found.")
+        if response.status_code in (301, 302, 303, 307, 308):
+            raise HTTPException(status_code=502, detail="Kaggle returned an unexpected redirect.")
         if response.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"Kaggle request failed with status {response.status_code}.")
 
         try:
-            return response.json()
+            return json.loads(raw)
         except ValueError as error:
             raise HTTPException(status_code=502, detail="Kaggle returned a non-JSON response.") from error
+
+    async def _read_limited_response(self, response: httpx.Response) -> bytes:
+        raw_length = response.headers.get("content-length")
+        if raw_length:
+            try:
+                content_length = int(raw_length)
+            except ValueError:
+                content_length = 0
+            if content_length > self.max_response_bytes:
+                raise HTTPException(status_code=502, detail="Kaggle response is too large.")
+
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in response.aiter_bytes():
+            total += len(chunk)
+            if total > self.max_response_bytes:
+                raise HTTPException(status_code=502, detail="Kaggle response is too large.")
+            chunks.append(chunk)
+        return b"".join(chunks)
 
 
 def normalize_submission(item: dict[str, Any]) -> KaggleSubmission:
