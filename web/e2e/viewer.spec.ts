@@ -10,23 +10,91 @@ const savedReplay = {
   createdAt: '2026-06-20T00:00:00Z',
 };
 
+const leaderboardSnapshot = {
+  competition: 'pokemon-tcg-ai-battle',
+  entries: [
+    {
+      rank: 1,
+      teamId: 16376775,
+      teamName: 'TrustHub hiroingk',
+      score: '1307.9',
+      submissionDate: '2026-06-18T08:20:23.220Z',
+    },
+    {
+      rank: 2,
+      teamId: 16378170,
+      teamName: 'The Debauchery Tea Party',
+      score: '1302.2',
+      submissionDate: '2026-06-20T11:54:31.206Z',
+    },
+  ],
+  refreshedAt: '2026-06-20T12:00:00Z',
+  expiresAt: '2026-06-20T12:30:00Z',
+  stale: false,
+  refreshInSeconds: 1800,
+  pageSize: 50,
+  nextPageToken: 'next',
+  source: 'cache',
+  message: 'Leaderboard served from cache.',
+};
+
 async function routeApi(page: Page) {
   let imported = false;
+
+  await page.route('**/api/admin/session', async (route) => {
+    const token = route.request().headers()['x-cabt-admin-token'];
+    await route.fulfill({
+      status: token === 'test-token' ? 200 : 403,
+      contentType: 'application/json',
+      body: JSON.stringify(token === 'test-token' ? { ok: true } : { detail: 'Admin token is required for replay imports and Kaggle access.' }),
+    });
+  });
 
   await page.route('**/api/kaggle/status', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        configured: false,
-        authMode: 'none',
-        message: 'Kaggle credentials are not configured.',
+        configured: true,
+        authMode: 'bearer',
+        adminRequired: true,
+        publicImportsEnabled: false,
+        message: 'Kaggle credentials are configured server-side.',
+      }),
+    });
+  });
+
+  await page.route('**/api/kaggle/leaderboard**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...leaderboardSnapshot,
+        source: route.request().method() === 'POST' ? 'kaggle' : leaderboardSnapshot.source,
+        message: route.request().method() === 'POST' ? 'Leaderboard refreshed from Kaggle.' : leaderboardSnapshot.message,
       }),
     });
   });
 
   await page.route('**/api/kaggle/submissions**', async (route) => {
+    const token = route.request().headers()['x-cabt-admin-token'];
+    if (token === 'test-token') {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          submissions: [
+            {
+              id: 111,
+              teamId: 16376775,
+              teamName: 'TrustHub hiroingk',
+              score: '1307.9',
+              status: 'complete',
+            },
+          ],
+        }),
+      });
+      return;
+    }
     await route.fulfill({
-      status: 401,
+      status: 403,
       contentType: 'application/json',
       body: JSON.stringify({ detail: 'Kaggle authentication failed or is required for this endpoint.' }),
     });
@@ -216,11 +284,29 @@ test('Saved replay can be opened from a direct link', async ({ page }) => {
   await expect(page.getByLabel('Action step')).toHaveValue('0');
 });
 
-test('Kaggle panel reports server-side auth requirements without exposing secrets', async ({ page }) => {
+test('Cached leaderboard is visible without exposing admin controls', async ({ page }) => {
   await routeApi(page);
   await page.goto('/');
 
-  await expect(page.getByText('Kaggle credentials are not configured.')).toBeVisible();
+  await expect(page.getByText('Leaderboard', { exact: true })).toBeVisible();
+  await expect(page.getByText('TrustHub hiroingk')).toBeVisible();
+  await expect(page.getByText('1307.9')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load submissions' })).toHaveCount(0);
+  await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toHaveCount(0);
+});
+
+test('Kaggle admin controls unlock only after hotkey and password', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'Kaggle admin' })).toHaveCount(0);
+  await page.keyboard.press('Control+Shift+K');
+  await expect(page.getByRole('button', { name: 'Kaggle admin' })).toHaveCount(0);
+  await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toBeVisible();
+
+  await page.getByPlaceholder('CABT_ADMIN_TOKEN').fill('test-token');
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await expect(page.getByRole('button', { name: 'Load submissions' })).toBeVisible();
   await page.getByRole('button', { name: 'Load submissions' }).click();
-  await expect(page.getByText('Kaggle authentication failed or is required for this endpoint.')).toBeVisible();
+  await expect(page.getByText('#111 - 1307.9')).toBeVisible();
 });

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 from json import JSONDecodeError
@@ -12,13 +13,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from .kaggle_client import KaggleClient
-from .models import ImportReplayRequest, KaggleStatus
+from .leaderboard_cache import LeaderboardCache
+from .models import ImportReplayRequest, KaggleLeaderboardSnapshot, KaggleStatus
 from .replay_store import ReplayStore
 from .settings import load_settings
 
 settings = load_settings()
 store = ReplayStore(settings.data_dir, max_replays=settings.max_stored_replays)
-kaggle = KaggleClient(settings.kaggle_base_url, settings.kaggle_credentials, max_response_bytes=settings.max_replay_bytes)
+kaggle = KaggleClient(
+    settings.kaggle_base_url,
+    settings.kaggle_credentials,
+    max_response_bytes=settings.max_replay_bytes,
+    api_base_url=settings.kaggle_api_base_url,
+)
+leaderboard_cache = LeaderboardCache(settings.data_dir, ttl_seconds=settings.kaggle_leaderboard_cache_seconds)
+leaderboard_refresh_lock = asyncio.Lock()
 
 app = FastAPI(title="CABT Replay Viewer API")
 app.add_middleware(
@@ -79,6 +88,37 @@ def require_replay_import_admin(x_cabt_admin_token: str = Header(default="")) ->
     require_admin(x_cabt_admin_token)
 
 
+async def get_leaderboard_snapshot(competition: str, *, refresh_if_stale: bool, force: bool = False) -> KaggleLeaderboardSnapshot:
+    snapshot = leaderboard_cache.get(competition)
+    should_refresh = force or (refresh_if_stale and snapshot.stale)
+    if not should_refresh:
+        return snapshot
+
+    if not settings.kaggle_credentials.configured:
+        return snapshot.model_copy(update={"message": "Kaggle credentials are not configured; showing cached leaderboard only."})
+
+    async with leaderboard_refresh_lock:
+        snapshot = leaderboard_cache.get(competition)
+        if not force and refresh_if_stale and not snapshot.stale:
+            return snapshot
+        try:
+            entries, next_page_token = await kaggle.list_leaderboard(
+                competition,
+                page_size=settings.kaggle_leaderboard_page_size,
+            )
+        except HTTPException as error:
+            if snapshot.entries:
+                detail = error.detail if isinstance(error.detail, str) else "Kaggle refresh failed."
+                return snapshot.model_copy(update={"source": "stale", "stale": True, "message": f"{detail} Showing stale cache."})
+            raise
+        return leaderboard_cache.save(
+            competition,
+            entries,
+            page_size=settings.kaggle_leaderboard_page_size,
+            next_page_token=next_page_token,
+        )
+
+
 async def read_limited_json_body(request: Request) -> Any:
     body = bytearray()
     async for chunk in request.stream():
@@ -122,6 +162,11 @@ def health() -> dict[str, object]:
     return {"ok": True, "kaggleConfigured": settings.kaggle_credentials.configured}
 
 
+@app.get("/api/admin/session")
+def admin_session(_admin: None = Depends(require_admin)) -> dict[str, object]:
+    return {"ok": True}
+
+
 @app.get("/api/replays")
 def list_replays(q: str = Query("", max_length=200)) -> dict[str, object]:
     return {"replays": [item.model_dump() for item in store.list(q)]}
@@ -157,9 +202,25 @@ def kaggle_status() -> KaggleStatus:
     )
 
 
+@app.get("/api/kaggle/leaderboard", response_model=KaggleLeaderboardSnapshot)
+async def kaggle_leaderboard(
+    competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
+    refresh: bool = Query(True),
+) -> KaggleLeaderboardSnapshot:
+    return await get_leaderboard_snapshot(competition, refresh_if_stale=refresh)
+
+
+@app.post("/api/kaggle/leaderboard/refresh", response_model=KaggleLeaderboardSnapshot, dependencies=[Depends(require_admin)])
+async def refresh_kaggle_leaderboard(
+    competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
+    force: bool = Query(False),
+) -> KaggleLeaderboardSnapshot:
+    return await get_leaderboard_snapshot(competition, refresh_if_stale=True, force=force)
+
+
 @app.get("/api/kaggle/submissions")
 async def kaggle_submissions(
-    competition: str = Query("pokemon-tcg-ai-battle", pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
+    competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     _admin: None = Depends(require_admin),

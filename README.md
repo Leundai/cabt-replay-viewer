@@ -14,7 +14,8 @@ runner logic.
   card inspection, and JSON drag/drop import.
 - FastAPI backend that keeps Kaggle credentials server-side.
 - File-backed replay library for local and Railway deployments.
-- Direct Kaggle HTTP adapter for submissions, episodes, and replay imports.
+- Direct Kaggle HTTP adapter for cached leaderboard pulls, submissions,
+  episodes, and replay imports.
 - Dockerfile and `railway.json` for Railway deployment.
 
 The bundled demo replay is a public fixture for smoke testing the viewer.
@@ -76,12 +77,23 @@ KAGGLE_USERNAME=your-kaggle-username
 KAGGLE_KEY=your-kaggle-api-key
 ```
 
-Kaggle calls are always admin-protected. Set `CABT_ADMIN_TOKEN` on the backend,
-then paste that token into the viewer's Kaggle panel when importing episodes.
-The token is held only in memory for the current page session. Local JSON
-drag/drop opens and saves in the browser without a token. The backend replay
-upload endpoint still requires admin access unless `CABT_ALLOW_PUBLIC_IMPORTS=true`
-is set for local development; that flag does not unlock Kaggle endpoints.
+Live Kaggle replay-import actions are admin-protected. Set `CABT_ADMIN_TOKEN`
+on the backend, then unlock the viewer's Kaggle admin controls with the private
+hotkey and that token when importing episodes. The token is held only in memory
+for the current page session. Local JSON drag/drop opens and saves in the
+browser without a token. The backend replay upload endpoint still requires
+admin access unless `CABT_ALLOW_PUBLIC_IMPORTS=true` is set for local
+development; that flag does not unlock admin Kaggle endpoints.
+
+The public leaderboard panel reads from a server-side cache. The viewer polls
+the cache, and the backend refreshes from Kaggle only when the cached snapshot
+is stale. The default cache window is 30 minutes:
+
+```bash
+KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
+KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
+KAGGLE_LEADERBOARD_PAGE_SIZE=50
+```
 
 Saved replay artifacts are publicly readable from the hosted replay library. Use
 local JSON drag/drop for private inspection, and only save/import replays that
@@ -98,6 +110,8 @@ CABT_DATA_DIR=/data
 CABT_ADMIN_TOKEN
 KAGGLE_USERNAME
 KAGGLE_KEY
+KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
+KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
 ```
 
 Attach a Railway volume mounted at `/data` so imported replays survive

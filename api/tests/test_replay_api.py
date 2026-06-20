@@ -5,7 +5,9 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
+from api.app.models import KaggleLeaderboardEntry
 from api.app.main import app, read_limited_json_body, store
+from api.app.settings import KaggleCredentials
 
 
 def test_import_and_search_replay(tmp_path, monkeypatch):
@@ -61,6 +63,53 @@ def test_public_imports_do_not_unlock_kaggle_endpoints(tmp_path, monkeypatch):
 
     kaggle = client.get("/api/kaggle/submissions")
     assert kaggle.status_code == 403
+
+
+def test_admin_session_requires_token(monkeypatch):
+    monkeypatch.setattr("api.app.main.settings.admin_token", "test-token")
+
+    client = TestClient(app)
+
+    blocked = client.get("/api/admin/session")
+    allowed = client.get("/api/admin/session", headers={"X-CABT-Admin-Token": "test-token"})
+
+    assert blocked.status_code == 403
+    assert allowed.status_code == 200
+    assert allowed.json()["ok"] is True
+
+
+def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_page_size", 2)
+    calls = []
+
+    async def fake_list_leaderboard(competition: str, page_size: int):
+        calls.append((competition, page_size))
+        return [KaggleLeaderboardEntry(rank=1, teamId=123, teamName="Alpha", score="100.0")], None
+
+    monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", fake_list_leaderboard)
+
+    client = TestClient(app)
+    first = client.get("/api/kaggle/leaderboard")
+    second = client.get("/api/kaggle/leaderboard")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["entries"][0]["teamName"] == "Alpha"
+    assert second.json()["source"] == "cache"
+    assert calls == [("pokemon-tcg-ai-battle", 2)]
+
+
+def test_leaderboard_admin_refresh_requires_token(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr("api.app.main.settings.admin_token", "test-token")
+
+    client = TestClient(app)
+
+    blocked = client.post("/api/kaggle/leaderboard/refresh")
+
+    assert blocked.status_code == 403
 
 
 def test_rejects_non_replay_payload(tmp_path, monkeypatch):

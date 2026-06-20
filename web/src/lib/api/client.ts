@@ -29,6 +29,27 @@ export type KaggleSubmission = {
   date?: string;
 };
 
+export type KaggleLeaderboardEntry = {
+  rank: number;
+  teamId?: number;
+  teamName: string;
+  score?: number | string;
+  submissionDate?: string;
+};
+
+export type KaggleLeaderboardSnapshot = {
+  competition: string;
+  entries: KaggleLeaderboardEntry[];
+  refreshedAt?: string;
+  expiresAt?: string;
+  stale: boolean;
+  refreshInSeconds: number;
+  pageSize: number;
+  nextPageToken?: string;
+  source: string;
+  message: string;
+};
+
 export type KaggleEpisode = {
   id: number;
   submissionId?: number;
@@ -97,6 +118,23 @@ export async function importReplayJson(replay: unknown, name?: string): Promise<
 
 export async function kaggleStatus(): Promise<KaggleStatus> {
   return apiJson<KaggleStatus>('/api/kaggle/status');
+}
+
+export async function verifyAdminSession(): Promise<void> {
+  await apiJson<{ ok: boolean }>('/api/admin/session');
+}
+
+export async function getKaggleLeaderboard(competition: string): Promise<KaggleLeaderboardSnapshot> {
+  const params = new URLSearchParams({ competition });
+  return apiJson<KaggleLeaderboardSnapshot>(`/api/kaggle/leaderboard?${params}`);
+}
+
+export async function refreshKaggleLeaderboard(competition: string): Promise<KaggleLeaderboardSnapshot> {
+  const params = new URLSearchParams({ competition });
+  return apiJson<KaggleLeaderboardSnapshot>(`/api/kaggle/leaderboard/refresh?${params}`, {
+    method: 'POST',
+    body: '{}',
+  });
 }
 
 export async function listKaggleSubmissions(competition: string, page = 1): Promise<KaggleSubmission[]> {

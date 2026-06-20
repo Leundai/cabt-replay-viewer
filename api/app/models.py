@@ -30,6 +30,27 @@ class KaggleStatus(BaseModel):
     message: str
 
 
+class KaggleLeaderboardEntry(BaseModel):
+    rank: int
+    teamId: int | None = None
+    teamName: str
+    score: str | float | None = None
+    submissionDate: str | None = None
+
+
+class KaggleLeaderboardSnapshot(BaseModel):
+    competition: str
+    entries: list[KaggleLeaderboardEntry] = Field(default_factory=list)
+    refreshedAt: str | None = None
+    expiresAt: str | None = None
+    stale: bool = True
+    refreshInSeconds: int = 0
+    pageSize: int = 0
+    nextPageToken: str | None = None
+    source: str = "empty"
+    message: str = ""
+
+
 class KaggleSubmission(BaseModel):
     id: int
     teamId: int | None = None

@@ -1,14 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
+    getKaggleLeaderboard,
     getReplayArtifact,
     importKaggleEpisode,
     kaggleStatus,
     listKaggleEpisodes,
     listKaggleSubmissions,
-    readAdminToken,
+    refreshKaggleLeaderboard,
     setAdminToken,
+    verifyAdminSession,
     type KaggleEpisode,
+    type KaggleLeaderboardEntry,
+    type KaggleLeaderboardSnapshot,
     type KaggleStatus,
     type KaggleSubmission,
     type ReplaySummary,
@@ -38,8 +42,15 @@
   let libraryError = $state('');
   let uploadDragActive = $state(false);
   let uploadInput = $state<HTMLInputElement>();
+  let leaderboard = $state<KaggleLeaderboardSnapshot | null>(null);
+  let leaderboardLoading = $state(false);
+  let leaderboardError = $state('');
 
-  let adminToken = $state(readAdminToken());
+  let adminPassword = $state('');
+  let adminControlVisible = $state(false);
+  let adminPromptOpen = $state(false);
+  let adminUnlocked = $state(false);
+  let adminError = $state('');
   let kaggle = $state<KaggleStatus>({
     configured: false,
     authMode: 'none',
@@ -55,10 +66,26 @@
   let kaggleError = $state('');
 
   let filteredSubmissions = $derived(filterSubmissions(submissions, searchQuery));
+  let filteredLeaderboard = $derived(filterLeaderboard(leaderboard?.entries ?? [], searchQuery));
+  let cacheStatus = $derived(formatCacheStatus(leaderboard));
 
   onMount(() => {
     void refreshLibrary();
     void refreshKaggleStatus();
+    void refreshLeaderboard();
+    const leaderboardTimer = setInterval(() => void refreshLeaderboard(), 60_000);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyK') {
+        event.preventDefault();
+        adminControlVisible = true;
+        adminPromptOpen = !adminUnlocked;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      clearInterval(leaderboardTimer);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   });
 
   async function refreshLibrary() {
@@ -95,6 +122,53 @@
         message: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  async function refreshLeaderboard() {
+    leaderboardLoading = !leaderboard;
+    leaderboardError = '';
+    try {
+      leaderboard = await getKaggleLeaderboard(competition.trim() || defaultCompetition);
+    } catch (error) {
+      leaderboardError = error instanceof Error ? error.message : String(error);
+    } finally {
+      leaderboardLoading = false;
+    }
+  }
+
+  async function refreshLeaderboardAsAdmin() {
+    kaggleLoading = true;
+    kaggleError = '';
+    try {
+      leaderboard = await refreshKaggleLeaderboard(competition.trim() || defaultCompetition);
+    } catch (error) {
+      kaggleError = error instanceof Error ? error.message : String(error);
+    } finally {
+      kaggleLoading = false;
+    }
+  }
+
+  async function unlockAdmin() {
+    adminError = '';
+    updateAdminToken(adminPassword);
+    try {
+      await verifyAdminSession();
+      adminUnlocked = true;
+      adminPromptOpen = false;
+      adminPassword = '';
+      await refreshKaggleStatus();
+    } catch (error) {
+      updateAdminToken('');
+      adminUnlocked = false;
+      adminError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  function lockAdmin() {
+    updateAdminToken('');
+    adminPassword = '';
+    adminUnlocked = false;
+    adminPromptOpen = false;
   }
 
   async function importFile(file: File | undefined) {
@@ -185,6 +259,45 @@
     ].some((value) => String(value ?? '').toLowerCase().includes(normalized)));
   }
 
+  function filterLeaderboard(items: KaggleLeaderboardEntry[], query: string): KaggleLeaderboardEntry[] {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return items;
+    }
+    return items.filter((entry) => [
+      entry.rank,
+      entry.teamId,
+      entry.teamName,
+      entry.score,
+      entry.submissionDate,
+    ].some((value) => String(value ?? '').toLowerCase().includes(normalized)));
+  }
+
+  function formatDate(value: string | undefined | null): string {
+    if (!value) {
+      return '';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  function formatCacheStatus(snapshot: KaggleLeaderboardSnapshot | null): string {
+    if (!snapshot?.refreshedAt) {
+      return 'No cache yet';
+    }
+    const refreshed = formatDate(snapshot.refreshedAt);
+    const next = snapshot.refreshInSeconds > 0 ? `${Math.ceil(snapshot.refreshInSeconds / 60)} min` : 'ready';
+    return `${refreshed} - ${next}`;
+  }
+
   function openUploadPicker() {
     uploadInput?.click();
   }
@@ -210,7 +323,6 @@
   }
 
   function updateAdminToken(value: string) {
-    adminToken = value;
     setAdminToken(value);
   }
 </script>
@@ -228,11 +340,46 @@
     Search
     <input
       type="search"
-      placeholder="team, submission, player..."
+      placeholder="team, score, player..."
       bind:value={searchQuery}
       oninput={() => void refreshLibrary()}
     />
   </label>
+
+  <section class="source-panel leaderboard-panel">
+    <div class="panel-heading">
+      <strong>Leaderboard</strong>
+      <button type="button" disabled={leaderboardLoading} onclick={refreshLeaderboard}>
+        {leaderboardLoading ? 'Refreshing' : 'Refresh'}
+      </button>
+    </div>
+    <div class="cache-line">
+      <span>{leaderboard?.competition || competition}</span>
+      <span class:stale={leaderboard?.stale}>{cacheStatus}</span>
+    </div>
+    {#if leaderboardError}
+      <p class="panel-error">{leaderboardError}</p>
+    {/if}
+    {#if leaderboard?.message}
+      <p>{leaderboard.message}</p>
+    {/if}
+    {#if filteredLeaderboard.length === 0}
+      <p class="empty">Cached standings will appear here after the first Kaggle pull.</p>
+    {:else}
+      <div class="leaderboard-list">
+        {#each filteredLeaderboard as entry}
+          <article class="leaderboard-row">
+            <span class="leaderboard-rank">{entry.rank}</span>
+            <span class="leaderboard-team">
+              <strong>{entry.teamName}</strong>
+              <small>{formatDate(entry.submissionDate) || (entry.teamId ? `Team ${entry.teamId}` : 'Team')}</small>
+            </span>
+            <strong class="leaderboard-score">{entry.score ?? 'No score'}</strong>
+          </article>
+        {/each}
+      </div>
+    {/if}
+  </section>
 
   <section
     class="drop-target"
@@ -294,61 +441,85 @@
     {/if}
   </section>
 
-  <section class="source-panel kaggle-panel">
-    <div class="panel-heading">
-      <strong>Kaggle</strong>
-      <span class:ready={kaggle.configured}>{kaggle.authMode}</span>
-    </div>
-    <p>{kaggle.message}</p>
-    {#if kaggle.adminRequired}
+  {#if adminControlVisible && !adminPromptOpen && !adminUnlocked}
+    <button type="button" class="admin-pill" onclick={() => (adminPromptOpen = true)}>Kaggle admin</button>
+  {/if}
+
+  {#if adminPromptOpen}
+    <section class="source-panel admin-unlock">
+      <div class="panel-heading">
+        <strong>Kaggle admin</strong>
+        <button type="button" onclick={() => (adminPromptOpen = false)}>Close</button>
+      </div>
+      <form class="admin-form" onsubmit={(event) => { event.preventDefault(); void unlockAdmin(); }}>
+        <label>
+          Password
+          <input
+            type="password"
+            autocomplete="off"
+            placeholder="CABT_ADMIN_TOKEN"
+            bind:value={adminPassword}
+          />
+        </label>
+        <button type="submit">Unlock</button>
+      </form>
+      {#if adminError}
+        <p class="panel-error">{adminError}</p>
+      {/if}
+    </section>
+  {/if}
+
+  {#if adminUnlocked}
+    <section class="source-panel kaggle-panel">
+      <div class="panel-heading">
+        <strong>Kaggle admin</strong>
+        <span class:ready={kaggle.configured}>{kaggle.authMode}</span>
+      </div>
+      <p>{kaggle.message}</p>
       <label>
-        Admin token
-        <input
-          type="password"
-          autocomplete="off"
-          placeholder="CABT_ADMIN_TOKEN"
-          value={adminToken}
-          oninput={(event) => updateAdminToken((event.currentTarget as HTMLInputElement).value)}
-        />
+        Competition
+        <input bind:value={competition} />
       </label>
-    {/if}
-    <label>
-      Competition
-      <input bind:value={competition} />
-    </label>
-    <button type="button" disabled={kaggleLoading} onclick={fetchSubmissions}>
-      {kaggleLoading ? 'Working...' : 'Load submissions'}
-    </button>
-    {#if kaggleError}
-      <p class="panel-error">{kaggleError}</p>
-    {/if}
-
-    {#if filteredSubmissions.length}
-      <div class="submission-list">
-        {#each filteredSubmissions as submission}
-          <button
-            type="button"
-            class:active={selectedSubmissionId === submission.id}
-            onclick={() => fetchEpisodes(submission.id)}
-          >
-            <strong>{submission.teamName || submission.submittedBy || `Submission ${submission.id}`}</strong>
-            <small>#{submission.id}{submission.score !== undefined ? ` · ${submission.score}` : ''}</small>
-          </button>
-        {/each}
+      <div class="admin-actions">
+        <button type="button" disabled={kaggleLoading} onclick={refreshLeaderboardAsAdmin}>
+          {kaggleLoading ? 'Working...' : 'Refresh cache'}
+        </button>
+        <button type="button" disabled={kaggleLoading} onclick={fetchSubmissions}>
+          {kaggleLoading ? 'Working...' : 'Load submissions'}
+        </button>
+        <button type="button" class="ghost" onclick={lockAdmin}>Lock</button>
       </div>
-    {/if}
+      {#if kaggleError}
+        <p class="panel-error">{kaggleError}</p>
+      {/if}
 
-    {#if episodes.length}
-      <div class="episode-list">
-        {#each episodes as episode}
-          <button type="button" onclick={() => openKaggleEpisode(episode.id)}>
-            <span>Episode {episode.id}</span>
-            <small>{episode.status || episode.reward || 'Open replay'}</small>
-          </button>
-        {/each}
-      </div>
-    {/if}
-  </section>
+      {#if filteredSubmissions.length}
+        <div class="submission-list">
+          {#each filteredSubmissions as submission}
+            <button
+              type="button"
+              class:active={selectedSubmissionId === submission.id}
+              onclick={() => fetchEpisodes(submission.id)}
+            >
+              <strong>{submission.teamName || submission.submittedBy || `Submission ${submission.id}`}</strong>
+              <small>#{submission.id}{submission.score !== undefined ? ` - ${submission.score}` : ''}</small>
+            </button>
+          {/each}
+        </div>
+      {/if}
+
+      {#if episodes.length}
+        <div class="episode-list">
+          {#each episodes as episode}
+            <button type="button" onclick={() => openKaggleEpisode(episode.id)}>
+              <span>Episode {episode.id}</span>
+              <small>{episode.status || episode.reward || 'Open replay'}</small>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </section>
+  {/if}
 </aside>
 
 <style>
@@ -375,7 +546,8 @@
   .drop-target,
   .replay-open,
   .submission-list button,
-  .episode-list button {
+  .episode-list button,
+  .leaderboard-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -412,7 +584,8 @@
   }
 
   .search-box,
-  .kaggle-panel label {
+  .kaggle-panel label,
+  .admin-unlock label {
     display: grid;
     gap: 6px;
     color: var(--text-primary);
@@ -476,11 +649,70 @@
     color: var(--accent-strong);
   }
 
+  .cache-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .cache-line .stale {
+    color: var(--danger-strong);
+  }
+
   .replay-list,
   .submission-list,
-  .episode-list {
+  .episode-list,
+  .leaderboard-list {
     display: grid;
     gap: 8px;
+  }
+
+  .leaderboard-row {
+    min-height: 54px;
+    padding: 9px;
+    border: 1px solid var(--surface-inset-border);
+    border-radius: 8px;
+    background: var(--surface-card-bg);
+  }
+
+  .leaderboard-rank {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--accent-tint);
+    color: var(--accent-strong);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .leaderboard-team {
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    gap: 3px;
+  }
+
+  .leaderboard-team strong,
+  .leaderboard-team small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .leaderboard-score {
+    max-width: 86px;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
   }
 
   .replay-open,
@@ -524,6 +756,25 @@
   .submission-list button.active {
     outline: 2px solid var(--accent-base);
     outline-offset: 1px;
+  }
+
+  .admin-pill {
+    width: 100%;
+    padding: 10px;
+  }
+
+  .admin-form,
+  .admin-actions {
+    display: grid;
+    gap: 8px;
+  }
+
+  .admin-actions {
+    grid-template-columns: 1fr 1fr auto;
+  }
+
+  .admin-actions .ghost {
+    color: var(--text-secondary);
   }
 
   @media (max-width: 920px) {
