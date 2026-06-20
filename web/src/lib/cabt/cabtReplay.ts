@@ -96,7 +96,7 @@ export function cabtReplayToSnapshot(input: unknown, metadata: CabtReplayMetadat
 
   visualFrames.forEach((frame, index) => {
     for (const entry of frame.logs ?? []) {
-      logs.push({ id: logId++, message: formatLog(entry, metadata), params: entry });
+      logs.push({ id: logId++, message: formatLog(entry, metadata, players), params: entry });
     }
     logEnds[index] = logs.length;
     const view = viewAt(index);
@@ -107,7 +107,7 @@ export function cabtReplayToSnapshot(input: unknown, metadata: CabtReplayMetadat
     winner = typeof view.winner === 'number' ? view.winner : winner;
     steps.push({
       index,
-      label: stepLabel(frame, index, metadata),
+      label: stepLabel(frame, index, metadata, players),
       stateIndex: index,
       actionIndex: index === 0 ? null : index - 1,
       sequence: index,
@@ -229,20 +229,20 @@ function playerNames(input: unknown): string[] {
   return names?.length ? names : ['Player 1', 'Player 2'];
 }
 
-function stepLabel(frame: CabtVisualizeFrame, index: number, metadata: CabtReplayMetadata): string {
-  const prizeSummary = prizeMoveSummary(frame.logs ?? []);
+function stepLabel(frame: CabtVisualizeFrame, index: number, metadata: CabtReplayMetadata, players: string[]): string {
+  const prizeSummary = prizeMoveSummary(frame.logs ?? [], players);
   if (prizeSummary) {
     return prizeSummary;
   }
 
-  const attackSummary = attackLogSummary(frame.logs ?? [], metadata);
+  const attackSummary = attackLogSummary(frame.logs ?? [], metadata, players);
   if (attackSummary) {
     return attackSummary;
   }
 
   const latestLog = frame.logs?.at(-1);
   if (latestLog) {
-    return formatLog(latestLog, metadata);
+    return formatLog(latestLog, metadata, players);
   }
   const selectType = frame.select?.type;
   const context = frame.select?.context;
@@ -254,9 +254,17 @@ function stepLabel(frame: CabtVisualizeFrame, index: number, metadata: CabtRepla
   return index === 0 ? 'Initial state' : `Frame ${index}`;
 }
 
-function formatLog(log: Record<string, unknown>, metadata: CabtReplayMetadata): string {
+/** Prefer the real team name; fall back to a generic label only when missing. */
+function actorName(playerIndex: number | undefined, players: string[]): string {
+  if (playerIndex === undefined) {
+    return 'Game';
+  }
+  return players[playerIndex] || `Player ${playerIndex + 1}`;
+}
+
+function formatLog(log: Record<string, unknown>, metadata: CabtReplayMetadata, players: string[]): string {
   const playerIndex = typeof log.playerIndex === 'number' ? log.playerIndex : undefined;
-  const actor = playerIndex === undefined ? 'Game' : `Player ${playerIndex + 1}`;
+  const actor = actorName(playerIndex, players);
   const card = cardName(Number(log.cardId), metadata);
   switch (log.type) {
     case 'TurnStart':
@@ -286,7 +294,7 @@ function formatLog(log: Record<string, unknown>, metadata: CabtReplayMetadata): 
   }
 }
 
-function prizeMoveSummary(logs: Array<Record<string, unknown>>): string {
+function prizeMoveSummary(logs: Array<Record<string, unknown>>, players: string[]): string {
   const prizeMoves = logs.filter((log) => log.type === 'MoveCard' && Number(log.fromArea) === 6 && Number(log.toArea) === 2);
   if (!prizeMoves.length) {
     return '';
@@ -298,13 +306,13 @@ function prizeMoveSummary(logs: Array<Record<string, unknown>>): string {
     return `Players took ${prizeMoves.length} Prize cards.`;
   }
 
-  const actor = `Player ${playerIndex + 1}`;
+  const actor = actorName(playerIndex, players);
   return prizeMoves.length === 1 ? `${actor} took 1 Prize card.` : `${actor} took ${prizeMoves.length} Prize cards.`;
 }
 
-function attackLogSummary(logs: Array<Record<string, unknown>>, metadata: CabtReplayMetadata): string {
+function attackLogSummary(logs: Array<Record<string, unknown>>, metadata: CabtReplayMetadata, players: string[]): string {
   const attack = logs.find((log) => log.type === 'Attack');
-  return attack ? formatLog(attack, metadata) : '';
+  return attack ? formatLog(attack, metadata, players) : '';
 }
 
 function areaName(area: unknown): string {
