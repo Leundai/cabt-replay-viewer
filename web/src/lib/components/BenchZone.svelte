@@ -1,51 +1,25 @@
 <script lang="ts">
   import BoardSlot from './BoardSlot.svelte';
-  import type { BoardInteractionSurface } from '../game/boardInteractionSurface';
   import type { PlayerView, PokemonSlotView } from '../game/types';
 
   type Props = {
     player: PlayerView;
     slots?: PokemonSlotView[];
     opponent?: boolean;
-    interaction: BoardInteractionSurface;
   };
 
   let {
     player,
     slots = [],
     opponent = false,
-    interaction,
   }: Props = $props();
-
-  let benchInteraction = $derived(interaction.bench(player));
 </script>
 
 <div class="bench-zone" class:opponent class:empty={slots.length === 0}>
-  <button
-    type="button"
-    class="bench-drop-surface"
-    class:can-drop={benchInteraction.canDrop}
-    tabindex="-1"
-    aria-hidden="true"
-    aria-label={`Play a Basic Pokemon to ${player.name}'s bench`}
-    title={`Play a Basic Pokemon to ${player.name}'s bench`}
-    onclick={benchInteraction.click}
-    ondragover={benchInteraction.dragOver}
-    ondrop={benchInteraction.drop}
-  ></button>
+  <div class="bench-debug-surface" aria-hidden="true"></div>
   <div class="bench-row" class:opponent>
     {#each slots as slot}
-      {@const slotInteraction = interaction.slot(slot)}
-      <BoardSlot
-        {slot}
-        canDrop={slotInteraction.canDrop}
-        promptSelectable={slotInteraction.promptSelectable}
-        promptSelected={slotInteraction.promptSelected}
-        slotDelta={slotInteraction.delta}
-        onclick={slotInteraction.click}
-        ondragover={slotInteraction.dragOver}
-        ondrop={slotInteraction.drop}
-      />
+      <BoardSlot {slot} />
     {/each}
   </div>
 </div>
@@ -90,7 +64,7 @@
     min-height: var(--bench-row-h);
   }
 
-  .bench-drop-surface {
+  .bench-debug-surface {
     position: absolute;
     inset: 0;
     z-index: 1;
@@ -103,17 +77,9 @@
     pointer-events: none;
   }
 
-  :global(.debug-zones) .bench-drop-surface {
+  :global(.debug-zones) .bench-debug-surface {
     border-color: rgba(5, 150, 105, 0.82);
     background: rgba(5, 150, 105, 0.08);
-  }
-
-  .bench-drop-surface.can-drop {
-    border-color: transparent;
-    background: var(--selection-bg);
-    box-shadow: var(--glow-playable-shadow);
-    pointer-events: auto;
-    cursor: pointer;
   }
 
   .bench-row {

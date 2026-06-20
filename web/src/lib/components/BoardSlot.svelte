@@ -7,27 +7,15 @@
   type Props = {
     slot: PokemonSlotView;
     active?: boolean;
-    canDrop?: boolean;
-    promptSelectable?: boolean;
-    promptSelected?: boolean;
-    slotDelta?: number;
     placement?: '' | 'top-active-slot' | 'bottom-active-slot';
     onclick?: (event: MouseEvent) => void;
-    ondragover?: (event: DragEvent) => void;
-    ondrop?: (event: DragEvent) => void;
   };
 
   let {
     slot,
     active = false,
-    canDrop = false,
-    promptSelectable = false,
-    promptSelected = false,
-    slotDelta = 0,
     placement = '',
     onclick,
-    ondragover,
-    ondrop,
   }: Props = $props();
 
   let stackedEnergy = $derived(slot.energy.length > 4);
@@ -84,9 +72,6 @@
   tabindex="0"
   class:active
   class:empty={slot.empty}
-  class:can-drop={canDrop}
-  class:prompt-selectable={promptSelectable}
-  class:prompt-selected={promptSelected}
   class={`board-slot ${placement}`}
   data-testid={`slot-${slot.ownerIndex}-${slot.slot}-${slot.index}`}
   data-owner-index={slot.ownerIndex}
@@ -95,15 +80,7 @@
   title={slot.pokemon?.fullName ?? (slot.slot === 'active' ? 'Active' : `Bench ${slot.index + 1}`)}
   {onclick}
   onkeydown={activateFromKeyboard}
-  {ondragover}
-  {ondrop}
 >
-  {#if slotDelta !== 0}
-    <div class="prompt-damage-badge" class:negative={slotDelta < 0}>
-      {slotDelta > 0 ? '+' : '−'}{Math.abs(slotDelta)}
-    </div>
-  {/if}
-
   {#if slot.pokemon}
     {#key slot.pokemon.fullName}
       <div class="slot-card" in:cardSwap out:cardSwap>
@@ -204,19 +181,6 @@
     background: var(--slot-empty-bg);
   }
 
-  .board-slot.can-drop,
-  .board-slot.prompt-selectable {
-    outline: 0;
-    background: var(--selection-bg);
-    box-shadow: var(--glow-playable-shadow);
-    filter: saturate(1.04);
-  }
-
-  .board-slot.prompt-selected {
-    background: var(--selection-bg);
-    box-shadow: var(--glow-selected-shadow);
-  }
-
   .slot-card {
     position: absolute;
     inset: 0;
@@ -227,30 +191,6 @@
   .board-slot > :global(.card-tile) {
     width: 100%;
     height: 100%;
-  }
-
-  .prompt-damage-badge {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    z-index: 7;
-    min-width: 34px;
-    padding: 5px 8px;
-    border-radius: 999px;
-    transform: translate(-50%, -50%);
-    background: #c2410c;
-    color: #fff7ed;
-    box-shadow: 0 8px 18px rgba(94, 36, 12, 0.28);
-    font-size: 14px;
-    font-weight: 900;
-    line-height: 1;
-    text-align: center;
-    pointer-events: none;
-  }
-
-  .prompt-damage-badge.negative {
-    background: #166e5b;
-    box-shadow: 0 8px 18px rgba(15, 60, 49, 0.32);
   }
 
   .empty-zone {

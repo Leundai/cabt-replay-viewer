@@ -37,7 +37,7 @@
 
   let failedImageUrl = $state('');
 
-  let imageUrl = $derived(faceDown ? '/assets/cardback.png' : card?.imageUrl);
+  let imageUrl = $derived(faceDown ? '/assets/cardback.png' : (card?.imageUrl ?? card?.cardImage));
   let lastImageUrl = $state<string | undefined>();
   let showImage = $derived(!!imageUrl && failedImageUrl !== imageUrl);
   let label = $derived(faceDown ? 'Card' : (card?.name ?? 'Empty'));

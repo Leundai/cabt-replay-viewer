@@ -1,25 +1,3 @@
-export const PlayerType = {
-  ANY: 0,
-  TOP_PLAYER: 1,
-  BOTTOM_PLAYER: 2,
-} as const;
-
-export const SlotType = {
-  BOARD: 0,
-  ACTIVE: 1,
-  BENCH: 2,
-  HAND: 3,
-  DISCARD: 4,
-  LOSTZONE: 5,
-  DECK: 6,
-} as const;
-
-export type CardTarget = {
-  player: number;
-  slot: number;
-  index: number;
-};
-
 export type CardView = {
   id?: number;
   name: string;
@@ -28,73 +6,44 @@ export type CardView = {
   setNumber?: string;
   cardImage?: string;
   imageUrl?: string;
-  superType?: string | number;
-  cardType?: string | number;
-  trainerType?: string | number;
-  energyType?: string | number;
-  stage?: string | number;
+  superType?: 'Pokemon' | 'Energy' | 'Trainer';
+  cardType?: string;
+  trainerType?: string;
+  energyType?: string;
+  stage?: string;
   evolvesFrom?: string;
   hp?: number;
-  retreat?: unknown[];
+  retreat?: string[];
   attacks?: AttackView[];
   powers?: PowerView[];
 };
 
 export type AttackView = {
   name: string;
-  cost?: unknown;
+  cost?: string[];
   damage?: string;
   text?: string;
 };
 
 export type PowerView = {
   name: string;
-  powerType?: string | number;
+  powerType?: string;
   text?: string;
-};
-
-export type AvailableActionStatus = {
-  name: string;
-  legal: boolean;
-  reason?: string;
-};
-
-export type AvailableAbilityStatus = AvailableActionStatus & {
-  used?: boolean;
-};
-
-export type AvailableRetreatStatus = {
-  legal: boolean;
-  targets: number[];
-  reason?: string;
-};
-
-export type AvailableActionsView = {
-  active?: {
-    attacks: AvailableActionStatus[];
-    abilities: AvailableAbilityStatus[];
-    retreat: AvailableRetreatStatus;
-  };
-  bench: Array<{
-    index: number;
-    abilities: AvailableAbilityStatus[];
-  }>;
 };
 
 export type PokemonSlotView = {
   ownerIndex: number;
   slot: 'active' | 'bench';
   index: number;
-  target: CardTarget;
   empty: boolean;
   pokemon?: CardView;
   cards: CardView[];
   damage: number;
   hp: number;
-  retreat: unknown[];
+  retreat: string[];
   energy: CardView[];
   tools: CardView[];
-  specialConditions: unknown[];
+  specialConditions: string[];
 };
 
 export type PlayerView = {
@@ -110,21 +59,6 @@ export type PlayerView = {
   prizesLeft: number;
   active: PokemonSlotView;
   bench: PokemonSlotView[];
-  playableCardIds: number[];
-  availableActions?: AvailableActionsView;
-};
-
-export type PromptView = {
-  id: number;
-  className: string;
-  type: string;
-  playerId: number;
-  playerIndex: number;
-  supported: boolean;
-  unsupportedReason?: string;
-  message?: string;
-  resultSchema: string;
-  fields: Record<string, unknown>;
 };
 
 export type LogView = {
@@ -143,29 +77,6 @@ export type GameView = {
   activePlayerId?: number;
   winner?: number;
   players: PlayerView[];
-  prompts: PromptView[];
   logs: LogView[];
   events: unknown[];
 };
-
-export type EngineOk = {
-  ok: true;
-  view: GameView;
-  sessionId?: string;
-};
-
-export type EngineFailure = {
-  ok: false;
-  error: string;
-  view?: GameView;
-};
-
-export type EngineResponse = EngineOk | EngineFailure;
-
-export function targetFor(actorIndex: number, ownerIndex: number, slot: number, index = 0): CardTarget {
-  return {
-    player: actorIndex === ownerIndex ? PlayerType.BOTTOM_PLAYER : PlayerType.TOP_PLAYER,
-    slot,
-    index,
-  };
-}

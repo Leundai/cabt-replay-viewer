@@ -7,6 +7,7 @@ export type SetImageInfo = {
 
 export type CardImageInput = {
   imageUrl?: string;
+  cardImage?: string;
   set?: string;
   setNumber?: string;
   name?: string;
@@ -49,8 +50,8 @@ export const setImageMap: Record<string, string | SetImageInfo> = {
 };
 
 export function resolveCardImageUrl(card: CardImageInput): string | undefined {
-  if (card.imageUrl) {
-    return card.imageUrl;
+  if (card.imageUrl || card.cardImage) {
+    return card.imageUrl ?? card.cardImage;
   }
   if (card.name === 'Unknown' || card.fullName === 'Unknown') {
     return undefined;

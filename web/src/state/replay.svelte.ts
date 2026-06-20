@@ -1,5 +1,6 @@
 import type { GameView } from '../lib/game/types';
 import type { ReplaySnapshot, ReplayStep } from '../lib/game/replay';
+import { getReplayArtifact } from '../lib/api/client';
 import {
   DEFAULT_REPLAY_PLAYBACK_SPEED,
   REPLAY_PLAYBACK_SPEEDS,
@@ -29,7 +30,7 @@ class ReplayStore {
     if (!replay || !step) {
       return null;
     }
-    return replay.views[step.stateIndex] ?? null;
+    return replay.viewAt(step.stateIndex);
   }
 
   get maxStepIndex(): number {
@@ -45,67 +46,20 @@ class ReplayStore {
   }
 
   async loadSaved(id = 'cabt-match.json'): Promise<void> {
-    if (this.loading) {
-      return;
-    }
-    this.pausePlayback();
-    this.loading = true;
-    this.error = '';
-    this.copiedForkPoint = false;
-    try {
-      this.replay = await loadCabtReplay(id);
-      this.stepIndex = 0;
-    } catch (error) {
-      this.error = error instanceof Error ? error.message : String(error);
-      this.replay = null;
-      this.stepIndex = 0;
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  async loadFile(file: File): Promise<void> {
-    if (this.loading) {
-      return;
-    }
-    this.pausePlayback();
-    this.loading = true;
-    this.error = '';
-    this.copiedForkPoint = false;
-    try {
-      const replayJson = JSON.parse(await file.text());
-      this.replay = await replayJsonToSnapshot(replayJson);
-      this.stepIndex = 0;
-    } catch (error) {
-      this.error = error instanceof Error ? error.message : String(error);
-      this.replay = null;
-      this.stepIndex = 0;
-    } finally {
-      this.loading = false;
-    }
+    await this.loadFrom(() => loadCabtReplay(id));
   }
 
   async loadData(replayData: unknown): Promise<void> {
-    if (this.loading) {
-      return;
-    }
-    this.pausePlayback();
-    this.loading = true;
-    this.error = '';
-    this.copiedForkPoint = false;
-    try {
-      this.replay = await replayJsonToSnapshot(replayData);
-      this.stepIndex = 0;
-    } catch (error) {
-      this.error = error instanceof Error ? error.message : String(error);
-      this.replay = null;
-      this.stepIndex = 0;
-    } finally {
-      this.loading = false;
-    }
+    await this.loadFrom(() => replayJsonToSnapshot(replayData));
   }
 
   async loadApiReplay(id: string): Promise<void> {
+    await this.loadFrom(async () => {
+      return replayJsonToSnapshot(await getReplayArtifact(id));
+    });
+  }
+
+  private async loadFrom(loader: () => Promise<ReplaySnapshot>): Promise<void> {
     if (this.loading) {
       return;
     }
@@ -114,8 +68,7 @@ class ReplayStore {
     this.error = '';
     this.copiedForkPoint = false;
     try {
-      const { getReplayArtifact } = await import('../lib/api/client');
-      this.replay = await replayJsonToSnapshot(await getReplayArtifact(id));
+      this.replay = await loader();
       this.stepIndex = 0;
     } catch (error) {
       this.error = error instanceof Error ? error.message : String(error);

@@ -13,5 +13,6 @@ COPY api ./api
 COPY --from=web /app/web/dist ./api/app/static
 ENV CABT_STATIC_DIR=/app/api/app/static
 ENV CABT_DATA_DIR=/data
-EXPOSE 8000
-CMD ["sh", "-c", "python -m uvicorn api.app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+ENV PORT=8080
+EXPOSE 8080
+CMD ["sh", "-c", "python -m uvicorn api.app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

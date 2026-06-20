@@ -38,7 +38,7 @@ button:hover:not(:disabled) {
    Board pieces (.card-tile / .board-slot) own their motion, so exclude them.
    Movement is gated behind reduced-motion: the press is a position change. */
 @media (prefers-reduced-motion: no-preference) {
-  button:not(.card-tile):not(.board-slot):not(.bench-drop-surface):active:not(:disabled) {
+  button:not(.card-tile):not(.board-slot):active:not(:disabled) {
     transform: scale(0.97);
   }
 }

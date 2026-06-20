@@ -9,12 +9,11 @@ describe('energy and Pokemon type icon helpers', () => {
   it('resolves basic energy artwork from card names', () => {
     expect(energyIconSrc({ name: 'Basic Psychic Energy' })).toBe('/assets/energy-icons/psychic.webp');
     expect(energyIconSrc({ name: 'Basic {G} Energy' })).toBe('/assets/energy-icons/grass.webp');
-    expect(energyIconSrc({ name: 'Basic Energy', energyType: 1 })).toBe('/assets/energy-icons/grass.webp');
+    expect(energyIconSrc({ name: 'Basic Energy', energyType: 'Grass' })).toBe('/assets/energy-icons/grass.webp');
     expect(energyIconSrc({ name: 'Unknown Special Energy' })).toBe('/assets/energy-icons/colorless.webp');
   });
 
   it('normalizes card type values for Pokemon badges', () => {
-    expect(normalizedTypeName(4)).toBe('lightning');
     expect(normalizedTypeName('{G}')).toBe('grass');
     expect(normalizedTypeName('Dark')).toBe('darkness');
     expect(pokemonTypeIconSrc('Fire')).toBe('/assets/energy-icons/fire.webp');

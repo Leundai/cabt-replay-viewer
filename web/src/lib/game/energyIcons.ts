@@ -42,7 +42,7 @@ const customEnergyIcons: Record<string, string> = {
   'Telepath Psychic Energy': '/assets/energy/telepath-psychic.webp',
 };
 
-export function energyIconSrc(card: { name?: string; fullName?: string; energyType?: string | number }): string {
+export function energyIconSrc(card: { name?: string; fullName?: string; energyType?: string }): string {
   const name = card.name || card.fullName || '';
   if (customEnergyIcons[name]) {
     return customEnergyIcons[name];
@@ -52,64 +52,17 @@ export function energyIconSrc(card: { name?: string; fullName?: string; energyTy
   return type ? `/assets/energy-icons/${type}.webp` : '/assets/energy-icons/colorless.webp';
 }
 
-export function normalizedTypeName(cardType: string | number | undefined): string | undefined {
-  if (cardType === undefined || cardType === null) {
-    return undefined;
-  }
-  if (typeof cardType === 'number') {
-    return (
-      [
-        undefined,
-        'grass',
-        'fire',
-        'water',
-        'lightning',
-        'psychic',
-        'fighting',
-        'darkness',
-        'metal',
-        'colorless',
-        'fairy',
-        'dragon',
-      ][cardType] ?? undefined
-    );
-  }
-  const normalized = cardType.toLowerCase().replace(/[^a-z]/g, '');
-  if (normalized === 'dark') {
-    return 'darkness';
-  }
-  return (
-    {
-      g: 'grass',
-      grass: 'grass',
-      r: 'fire',
-      fire: 'fire',
-      w: 'water',
-      water: 'water',
-      l: 'lightning',
-      lightning: 'lightning',
-      p: 'psychic',
-      psychic: 'psychic',
-      f: 'fighting',
-      fighting: 'fighting',
-      d: 'darkness',
-      darkness: 'darkness',
-      m: 'metal',
-      metal: 'metal',
-      c: 'colorless',
-      colorless: 'colorless',
-      fairy: 'fairy',
-      dragon: 'dragon',
-    }[normalized] ?? undefined
-  );
+export function normalizedTypeName(cardType: string | undefined): string | undefined {
+  return energyIconName(cardType);
 }
 
-export function pokemonTypeIconSrc(cardType: string | number | undefined): string | undefined {
+export function pokemonTypeIconSrc(cardType: string | undefined): string | undefined {
   const type = normalizedTypeName(cardType);
   return type ? `/assets/energy-icons/${type}.webp` : undefined;
 }
 
-export function pokemonTypeLabelFor(cardType: string | number | undefined): string {
+export function pokemonTypeLabelFor(cardType: string | undefined): string {
   const type = normalizedTypeName(cardType);
   return type ? type[0].toUpperCase() + type.slice(1) : 'Pokemon';
 }
+import { energyIconName } from './energy';

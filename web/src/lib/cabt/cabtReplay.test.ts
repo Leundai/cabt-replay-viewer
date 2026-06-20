@@ -39,8 +39,9 @@ describe('cabtReplayToSnapshot', () => {
       }],
     }, metadata);
 
-    expect(snapshot.views[0].players[0].active.energy).toHaveLength(1);
-    expect(snapshot.views[0].players[0].active.energy[0].name).toBe('Basic Grass Energy');
+    const view = snapshot.viewAt(0);
+    expect(view?.players[0].active.energy).toHaveLength(1);
+    expect(view?.players[0].active.energy[0].name).toBe('Basic Grass Energy');
   });
 
   it('does not render provided energy units as attached cards', () => {
@@ -75,7 +76,7 @@ describe('cabtReplayToSnapshot', () => {
       }],
     }, metadata);
 
-    expect(snapshot.views[0].players[0].active.energy).toHaveLength(0);
+    expect(snapshot.viewAt(0)?.players[0].active.energy).toHaveLength(0);
   });
 
   it('summarizes multi-prize frames instead of showing only the last prize card move', () => {
@@ -183,6 +184,6 @@ describe('cabtReplayToSnapshot', () => {
     expect(snapshot.id).toBe('episode-1');
     expect(snapshot.name).toBe('Card Battle replay');
     expect(snapshot.players.map((player) => player.name)).toEqual(['Demo Green', 'Demo Fighting']);
-    expect(snapshot.views[0].players[1].active.pokemon?.name).toBe('Mega Lucario ex');
+    expect(snapshot.viewAt(0)?.players[1].active.pokemon?.name).toBe('Mega Lucario ex');
   });
 });

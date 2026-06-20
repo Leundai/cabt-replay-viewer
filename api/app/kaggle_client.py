@@ -61,7 +61,7 @@ class KaggleClient:
 
 def normalize_submission(item: dict[str, Any]) -> KaggleSubmission:
     return KaggleSubmission(
-        id=int(item.get("ref") or item.get("id") or item.get("submissionId") or 0),
+        id=parse_int(value(item, "ref", "id", "submissionId")),
         teamName=value(item, "teamName", "team_name"),
         submittedBy=value(item, "submittedBy", "submitted_by"),
         description=value(item, "description"),
@@ -75,8 +75,8 @@ def normalize_episode(item: dict[str, Any], fallback_submission_id: int | None =
     agents = item.get("agents") if isinstance(item.get("agents"), list) else []
     matching_agent = next((agent for agent in agents if isinstance(agent, dict) and agent.get("submissionId")), {})
     return KaggleEpisode(
-        id=int(item.get("id") or item.get("episodeId") or 0),
-        submissionId=int(matching_agent.get("submissionId") or fallback_submission_id or 0) or None,
+        id=parse_int(value(item, "id", "episodeId")),
+        submissionId=parse_int(matching_agent.get("submissionId") or fallback_submission_id) or None,
         reward=value(matching_agent, "reward"),
         status=value(item, "state", "status"),
         date=value(item, "createTime", "date"),
@@ -88,3 +88,10 @@ def value(item: dict[str, Any], *keys: str) -> Any:
         if key in item and item[key] not in (None, ""):
             return item[key]
     return None
+
+
+def parse_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0

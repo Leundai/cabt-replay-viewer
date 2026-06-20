@@ -1,6 +1,7 @@
 import { cabtStateToGameView, createReplayCabtCardCatalog, type CabtReplayAttackRow, type CabtReplayCardRow, type CabtViewCurrentState } from './cabtViewAdapter';
 import type { GameView, LogView } from '../game/types';
 import type { ReplaySnapshot, ReplayStep } from '../game/replay';
+import { replaceEnergySymbols } from '../game/energy';
 import { labelFor } from '../game/labels';
 
 type CardRow = CabtReplayCardRow & {
@@ -85,17 +86,25 @@ export function cabtReplayToSnapshot(input: unknown, metadata: CabtReplayMetadat
 
   const environment = replayEnvironment(input);
   const players = playerNames(input);
-  const views: GameView[] = [];
   const steps: ReplayStep[] = [];
   const logs: LogView[] = [];
+  const logEnds: number[] = [];
   let logId = 1;
+  let turnCount = 0;
+  let winner = -1;
+  const viewAt = createViewResolver(visualFrames, players, logs, logEnds, metadata);
 
   visualFrames.forEach((frame, index) => {
     for (const entry of frame.logs ?? []) {
       logs.push({ id: logId++, message: formatLog(entry, metadata), params: entry });
     }
-    const view = frameToGameView(frame, players, logs, metadata);
-    views.push(view);
+    logEnds[index] = logs.length;
+    const view = viewAt(index);
+    if (!view) {
+      return;
+    }
+    turnCount = Math.max(turnCount, view.turn);
+    winner = typeof view.winner === 'number' ? view.winner : winner;
     steps.push({
       index,
       label: stepLabel(frame, index, metadata),
@@ -114,20 +123,46 @@ export function cabtReplayToSnapshot(input: unknown, metadata: CabtReplayMetadat
     });
   });
 
-  const finalView = views.at(-1);
-  const winner = typeof finalView?.winner === 'number' ? finalView.winner : -1;
   return {
     id: String(environment?.id ?? 'cabt-local-replay'),
     name: environment?.title ? `${environment.title} replay` : 'CABT replay',
     created: Date.now(),
     players: players.map((name, index) => ({ userId: index, name })),
     winner,
-    stateCount: views.length,
+    stateCount: visualFrames.length,
     actionCount: Math.max(0, steps.length - 1),
-    turnCount: Math.max(...views.map((view) => view.turn), 0),
+    turnCount,
     cardNames: metadata.replayCardCatalog.cardNames ?? [...new Set([...metadata.cardDatabase.values()].map((card) => card.name))],
-    views,
+    viewAt,
     steps,
+  };
+}
+
+function createViewResolver(
+  frames: CabtVisualizeFrame[],
+  players: string[],
+  logs: LogView[],
+  logEnds: number[],
+  metadata: CabtReplayMetadata,
+): ReplaySnapshot['viewAt'] {
+  let cachedStateIndex = -1;
+  let cachedView: GameView | null = null;
+
+  return (stateIndex: number) => {
+    if (!Number.isInteger(stateIndex) || stateIndex < 0 || stateIndex >= frames.length) {
+      return null;
+    }
+    if (stateIndex === cachedStateIndex) {
+      return cachedView;
+    }
+    cachedStateIndex = stateIndex;
+    cachedView = frameToGameView(
+      frames[stateIndex],
+      players,
+      logs.slice(0, logEnds[stateIndex] ?? logs.length),
+      metadata,
+    );
+    return cachedView;
   };
 }
 
@@ -303,16 +338,7 @@ function attackNameForLog(log: Record<string, unknown>, metadata: CabtReplayMeta
 }
 
 function displayName(name: string): string {
-  return name
-    .replaceAll('{G}', 'Grass')
-    .replaceAll('{R}', 'Fire')
-    .replaceAll('{W}', 'Water')
-    .replaceAll('{L}', 'Lightning')
-    .replaceAll('{P}', 'Psychic')
-    .replaceAll('{F}', 'Fighting')
-    .replaceAll('{D}', 'Darkness')
-    .replaceAll('{M}', 'Metal')
-    .replaceAll('{C}', 'Colorless');
+  return replaceEnergySymbols(name);
 }
 
 function replayWinnerForResult(result: number): number | undefined {

@@ -49,13 +49,19 @@ class ReplayStore:
             raise FileNotFoundError(replay_id)
         return json.loads(path.read_text())
 
-    def save(self, replay: Any, *, name: str | None = None, source: str = "upload", episode_id: int | None = None, submission_id: int | None = None) -> ReplaySummary:
-        self.ensure()
-        encoded = json.dumps(replay, sort_keys=True, separators=(",", ":")).encode()
+    def save(
+        self,
+        replay: Any,
+        *,
+        encoded: bytes | None = None,
+        name: str | None = None,
+        source: str = "upload",
+        episode_id: int | None = None,
+        submission_id: int | None = None,
+    ) -> ReplaySummary:
+        encoded = encoded if encoded is not None else json.dumps(replay, sort_keys=True, separators=(",", ":")).encode()
         digest = hashlib.sha256(encoded).hexdigest()[:16]
         replay_id = safe_id(f"{source}-{episode_id or digest}")
-        (self.replay_dir / f"{replay_id}.json").write_bytes(encoded)
-
         summary = ReplaySummary(
             id=replay_id,
             name=name or infer_replay_name(replay, replay_id),
@@ -67,21 +73,26 @@ class ReplayStore:
             episodeId=episode_id,
             submissionId=submission_id,
         )
-        self._upsert(summary)
-        return summary
 
-    def _upsert(self, summary: ReplaySummary) -> None:
         with self._lock:
             self.ensure()
-            items = [
-                ReplaySummary.model_validate(item)
-                for item in json.loads(self.index_path.read_text())
-                if item.get("id") != summary.id
-            ]
-            items.insert(0, summary)
-            temp_path = self.index_path.with_suffix(".json.tmp")
-            temp_path.write_text(json.dumps([item.model_dump() for item in items], indent=2))
-            os.replace(temp_path, self.index_path)
+            replay_path = self.replay_dir / f"{replay_id}.json"
+            temp_replay_path = replay_path.with_suffix(".json.tmp")
+            temp_replay_path.write_bytes(encoded)
+            os.replace(temp_replay_path, replay_path)
+            self._upsert_locked(summary)
+        return summary
+
+    def _upsert_locked(self, summary: ReplaySummary) -> None:
+        items = [
+            ReplaySummary.model_validate(item)
+            for item in json.loads(self.index_path.read_text())
+            if item.get("id") != summary.id
+        ]
+        items.insert(0, summary)
+        temp_path = self.index_path.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps([item.model_dump() for item in items], indent=2))
+        os.replace(temp_path, self.index_path)
 
 
 def infer_replay_name(replay: Any, fallback: str) -> str:

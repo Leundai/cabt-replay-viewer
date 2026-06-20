@@ -28,7 +28,7 @@ export type ReplaySnapshot = {
   actionCount: number;
   turnCount: number;
   cardNames: string[];
-  views: GameView[];
+  viewAt: (stateIndex: number) => GameView | null;
   steps: ReplayStep[];
 };
 

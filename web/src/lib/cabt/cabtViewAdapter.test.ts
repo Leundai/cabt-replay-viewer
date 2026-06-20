@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { PlayerType, SlotType } from '../game/types';
 import { cabtStateToGameView, createReplayCabtCardCatalog } from './cabtViewAdapter';
 import type { CabtCardViewCatalog } from './cabtViewAdapter';
 
@@ -71,7 +70,6 @@ describe('cabtStateToGameView', () => {
     expect(view.players[0].hand).toEqual([{ name: 'Card', fullName: 'Card' }, { name: 'Card', fullName: 'Card' }]);
     expect(view.players[0].stadium.map((card) => card.name)).toEqual(['Shared Stadium']);
     expect(view.players[1].stadium.map((card) => card.name)).toEqual(['Owned Stadium']);
-    expect(view.players[0].active.target).toEqual({ player: PlayerType.BOTTOM_PLAYER, slot: SlotType.ACTIVE, index: 0 });
     expect(view.players[0].active.damage).toBe(30);
     expect(view.players[0].active.retreat).toHaveLength(2);
     expect(view.players[0].active.energy).toEqual([expect.objectContaining({ name: 'Grass Energy' })]);
@@ -115,7 +113,7 @@ describe('createReplayCabtCardCatalog', () => {
     expect(catalog.cardToView({ id: 1 })).toEqual(expect.objectContaining({
       name: 'Basic Grass Energy',
       superType: 'Energy',
-      energyType: 1,
+      energyType: 'Grass',
     }));
     expect(catalog.cardToView({ id: 710 })).toEqual(expect.objectContaining({
       name: 'Celebi',

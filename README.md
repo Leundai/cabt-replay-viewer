@@ -77,6 +77,10 @@ for the current page session. Local JSON drag/drop still opens in the browser
 without a token; saving it to the replay library requires admin access unless
 `CABT_ALLOW_PUBLIC_IMPORTS=true` is set for development.
 
+Saved replay artifacts are publicly readable from the hosted replay library. Use
+local JSON drag/drop for private inspection, and only save/import replays that
+are safe to publish.
+
 ## Railway
 
 This repo is ready for Railway with the included Dockerfile.
@@ -94,7 +98,8 @@ Attach a Railway volume mounted at `/data` so imported replays survive
 redeploys. Without a volume the service still runs, but the replay library is
 ephemeral.
 
-The service healthcheck is `/api/health`.
+The container listens on `$PORT` and defaults to `8080`. The service healthcheck
+is `/api/health`.
 
 ## Tests
 

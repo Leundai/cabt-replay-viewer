@@ -1,7 +1,6 @@
 <script lang="ts">
   import BoardSlot from './BoardSlot.svelte';
   import StadiumCard from './StadiumCard.svelte';
-  import type { BoardInteractionSurface } from '../game/boardInteractionSurface';
   import type { CardView, PlayerView, PokemonSlotView } from '../game/types';
 
   type ZoneName = 'discard' | 'lostZone' | 'stadium' | 'playZone';
@@ -13,7 +12,6 @@
     bottomActiveSlot: PokemonSlotView;
     currentStadium?: CardView;
     currentStadiumOwner?: PlayerView;
-    interaction: BoardInteractionSurface;
     showZone: (playerIndex: number, zone: ZoneName, title: string, faceDown?: boolean) => void;
   };
 
@@ -24,12 +22,8 @@
     bottomActiveSlot,
     currentStadium,
     currentStadiumOwner,
-    interaction,
     showZone,
   }: Props = $props();
-
-  let topInteraction = $derived(interaction.slot(topPlayer.active));
-  let bottomInteraction = $derived(interaction.slot(bottomPlayer.active));
 </script>
 
 <div class="active-duel">
@@ -37,13 +31,6 @@
     slot={topActiveSlot}
     active
     placement="top-active-slot"
-    canDrop={topInteraction.canDrop}
-    promptSelectable={topInteraction.promptSelectable}
-    promptSelected={topInteraction.promptSelected}
-    slotDelta={topInteraction.delta}
-    onclick={topInteraction.click}
-    ondragover={topInteraction.dragOver}
-    ondrop={topInteraction.drop}
   />
 
   {#if currentStadium && currentStadiumOwner?.index === topPlayer.index}
@@ -54,13 +41,6 @@
     slot={bottomActiveSlot}
     active
     placement="bottom-active-slot"
-    canDrop={bottomInteraction.canDrop}
-    promptSelectable={bottomInteraction.promptSelectable}
-    promptSelected={bottomInteraction.promptSelected}
-    slotDelta={bottomInteraction.delta}
-    onclick={bottomInteraction.click}
-    ondragover={bottomInteraction.dragOver}
-    ondrop={bottomInteraction.drop}
   />
 
   {#if currentStadium && currentStadiumOwner?.index === bottomPlayer.index}
@@ -93,7 +73,7 @@
     background: rgba(245, 158, 11, 0.06);
   }
 
-  .active-duel > :global(.board-slot.active:not(.empty):not(.can-drop):not(.prompt-selectable):not(.prompt-selected)) {
+  .active-duel > :global(.board-slot.active:not(.empty)) {
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7), 0 12px 26px rgba(23, 30, 38, 0.22);
   }
 

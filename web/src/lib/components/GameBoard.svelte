@@ -2,7 +2,6 @@
   import ActiveDuel from './ActiveDuel.svelte';
   import BenchZone from './BenchZone.svelte';
   import CenterPiles from './CenterPiles.svelte';
-  import type { BoardInteractionSurface } from '../game/boardInteractionSurface';
   import type { CardView, PlayerView, PokemonSlotView } from '../game/types';
 
   type ZoneName = 'discard' | 'lostZone' | 'stadium' | 'playZone';
@@ -16,7 +15,6 @@
     bottomActiveSlot: PokemonSlotView;
     currentStadium?: CardView;
     currentStadiumOwner?: PlayerView;
-    interaction: BoardInteractionSurface;
     showZone: (playerIndex: number, zone: ZoneName, title: string, faceDown?: boolean) => void;
     boardTilt?: number;
     boardPerspective?: number;
@@ -33,7 +31,6 @@
     bottomActiveSlot,
     currentStadium,
     currentStadiumOwner,
-    interaction,
     showZone,
     boardTilt = 8,
     boardPerspective = 1250,
@@ -97,16 +94,6 @@
     if (clickProjectedPile(event)) {
       return;
     }
-    if (!interaction.canPlayOnBoard) {
-      return;
-    }
-    if (
-      event.target instanceof Element &&
-      event.target.closest('button, a, input, textarea, select, .board-slot, .card-tile, .bench-drop-surface, .stack-pile, .stadium-card')
-    ) {
-      return;
-    }
-    interaction.board.click(event);
   }
 
   function showLostZone(player: PlayerView) {
@@ -118,30 +105,23 @@
   }
 </script>
 
-<section
-  class="playmat"
-  class:can-play-on-board={interaction.canPlayOnBoard}
-  class:has-projected-pile-hover={projectedHoverPile !== ''}
+  <section
+    class="playmat"
+    class:has-projected-pile-hover={projectedHoverPile !== ''}
   style={boardPerspectiveStyle}
   role="presentation"
-  onclick={clickBoardSurface}
-  onmousemove={updateProjectedPileHover}
-  onmouseleave={() => (projectedHoverPile = '')}
-  ondragover={interaction.board.dragOver}
-  ondrop={interaction.board.drop}
->
+    onclick={clickBoardSurface}
+    onmousemove={updateProjectedPileHover}
+    onmouseleave={() => (projectedHoverPile = '')}
+  >
   <div
     class="game-board-plane"
-    class:can-play-on-board={interaction.canPlayOnBoard}
     role="presentation"
-    ondragover={interaction.board.dragOver}
-    ondrop={interaction.board.drop}
   >
     <BenchZone
       player={topPlayer}
       slots={topBenchSlots}
       opponent
-      {interaction}
     />
 
     <CenterPiles
@@ -164,14 +144,12 @@
       {bottomActiveSlot}
       {currentStadium}
       {currentStadiumOwner}
-      {interaction}
       {showZone}
     />
 
     <BenchZone
       player={bottomPlayer}
       slots={bottomBenchSlots}
-      {interaction}
     />
   </div>
 
@@ -269,16 +247,6 @@
     background: url("/assets/pokeball.svg") center / contain no-repeat;
     opacity: var(--board-center-opacity);
     pointer-events: none;
-  }
-
-  .game-board-plane.can-play-on-board {
-    cursor: pointer;
-  }
-
-  .game-board-plane.can-play-on-board::before {
-    border-color: var(--selection-border-strong);
-    background: var(--board-play-bg);
-    box-shadow: var(--board-play-shadow);
   }
 
   @media (max-width: 980px) {

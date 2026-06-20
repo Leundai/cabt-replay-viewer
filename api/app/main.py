@@ -4,9 +4,9 @@ import hmac
 import json
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .kaggle_client import KaggleClient
@@ -28,6 +28,20 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def reject_oversized_replay_bodies(request: Request, call_next):
+    if request.url.path == "/api/replays/import":
+        raw_length = request.headers.get("content-length")
+        if raw_length:
+            try:
+                content_length = int(raw_length)
+            except ValueError:
+                content_length = 0
+            if content_length > settings.max_replay_bytes:
+                return JSONResponse(status_code=413, content={"detail": "Replay payload is too large."})
+    return await call_next(request)
+
+
 def require_admin(x_cabt_admin_token: str = Header(default="")) -> None:
     if settings.allow_public_imports:
         return
@@ -37,15 +51,16 @@ def require_admin(x_cabt_admin_token: str = Header(default="")) -> None:
         raise HTTPException(status_code=403, detail="Admin token is required for replay imports and Kaggle access.")
 
 
-def validate_replay_payload(replay: Any) -> None:
-    try:
-        size = len(json.dumps(replay, separators=(",", ":")).encode())
-    except TypeError as error:
-        raise HTTPException(status_code=400, detail="Replay payload must be JSON serializable.") from error
-    if size > settings.max_replay_bytes:
-        raise HTTPException(status_code=413, detail="Replay payload is too large.")
+def validate_replay_payload(replay: Any) -> bytes:
     if not looks_like_replay(replay):
         raise HTTPException(status_code=400, detail="Replay payload does not look like a CABT or Kaggle replay.")
+    try:
+        encoded = json.dumps(replay, sort_keys=True, separators=(",", ":")).encode()
+    except TypeError as error:
+        raise HTTPException(status_code=400, detail="Replay payload must be JSON serializable.") from error
+    if len(encoded) > settings.max_replay_bytes:
+        raise HTTPException(status_code=413, detail="Replay payload is too large.")
+    return encoded
 
 
 def looks_like_replay(replay: Any) -> bool:
@@ -72,8 +87,8 @@ def list_replays(q: str = "") -> dict[str, object]:
 
 @app.post("/api/replays/import", dependencies=[Depends(require_admin)])
 def import_replay(request: ImportReplayRequest) -> dict[str, object]:
-    validate_replay_payload(request.replay)
-    summary = store.save(request.replay, name=request.name, source="upload")
+    encoded = validate_replay_payload(request.replay)
+    summary = store.save(request.replay, encoded=encoded, name=request.name, source="upload")
     return {"replay": summary.model_dump()}
 
 
@@ -116,8 +131,8 @@ async def kaggle_episodes(submission_id: int, _admin: None = Depends(require_adm
 @app.post("/api/kaggle/episodes/{episode_id}/import", dependencies=[Depends(require_admin)])
 async def import_kaggle_episode(episode_id: int) -> dict[str, object]:
     replay = await kaggle.get_replay(episode_id)
-    validate_replay_payload(replay)
-    summary = store.save(replay, source="kaggle", episode_id=episode_id)
+    encoded = validate_replay_payload(replay)
+    summary = store.save(replay, encoded=encoded, source="kaggle", episode_id=episode_id)
     return {"replay": summary.model_dump()}
 
 
@@ -127,6 +142,11 @@ if settings.static_dir.exists():
         path = settings.static_dir / public_dir
         if path.exists():
             app.mount(f"/{public_dir}", StaticFiles(directory=path), name=public_dir)
+
+
+@app.get("/api/{path:path}")
+def missing_api(path: str):
+    raise HTTPException(status_code=404, detail="API route not found.")
 
 
 @app.get("/{path:path}", include_in_schema=False)
