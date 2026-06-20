@@ -108,6 +108,8 @@ class KaggleClient:
             raise HTTPException(status_code=404, detail="Kaggle resource was not found.")
         if response.status_code in (301, 302, 303, 307, 308):
             raise HTTPException(status_code=502, detail="Kaggle returned an unexpected redirect.")
+        if response.status_code == 429:
+            raise HTTPException(status_code=429, detail="Kaggle rate limit was reached.")
         if response.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"Kaggle request failed with status {response.status_code}.")
 

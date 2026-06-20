@@ -95,24 +95,60 @@ def require_replay_import_admin(x_cabt_admin_token: str = Header(default="")) ->
     require_admin(x_cabt_admin_token)
 
 
+class KaggleRefreshLimiter:
+    def __init__(self, pause_after_calls: int, pause_seconds: int):
+        self.pause_after_calls = pause_after_calls
+        self.pause_seconds = pause_seconds
+        self.calls = 0
+
+    async def wait(self) -> None:
+        if self.pause_after_calls > 0 and self.calls > 0 and self.calls % self.pause_after_calls == 0:
+            await asyncio.sleep(self.pause_seconds)
+        self.calls += 1
+
+    async def backoff(self) -> None:
+        if self.pause_seconds > 0:
+            await asyncio.sleep(self.pause_seconds)
+        self.calls = 0
+
+
+async def kaggle_refresh_call(limiter: KaggleRefreshLimiter, operation):
+    await limiter.wait()
+    try:
+        return await operation()
+    except HTTPException as error:
+        if error.status_code != 429:
+            raise
+    await limiter.backoff()
+    await limiter.wait()
+    return await operation()
+
+
 async def enrich_leaderboard_entries(entries: list[KaggleLeaderboardEntry]) -> list[KaggleLeaderboardEntry]:
     if settings.kaggle_leaderboard_team_submission_limit <= 0 or settings.kaggle_leaderboard_submissions_per_team <= 0:
         return entries
 
+    limiter = KaggleRefreshLimiter(
+        settings.kaggle_leaderboard_rate_pause_after_calls,
+        settings.kaggle_leaderboard_rate_pause_seconds,
+    )
     enriched: list[KaggleLeaderboardEntry] = []
     for index, entry in enumerate(entries):
         if index >= settings.kaggle_leaderboard_team_submission_limit or entry.teamId is None:
             enriched.append(entry)
             continue
-        enriched.append(await enrich_leaderboard_entry(entry))
+        enriched.append(await enrich_leaderboard_entry(entry, limiter))
     return enriched
 
 
-async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry) -> KaggleLeaderboardEntry:
+async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry, limiter: KaggleRefreshLimiter) -> KaggleLeaderboardEntry:
     if entry.teamId is None:
         return entry
     try:
-        submissions = await kaggle.list_team_submissions(entry.teamId, team_name=entry.teamName)
+        submissions = await kaggle_refresh_call(
+            limiter,
+            lambda: kaggle.list_team_submissions(entry.teamId, team_name=entry.teamName),
+        )
     except HTTPException:
         return entry
     except Exception:
@@ -126,7 +162,7 @@ async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry) -> KaggleLeade
         if not submission.teamName:
             updates["teamName"] = entry.teamName
 
-        episodes = await safe_list_submission_episodes(submission.id)
+        episodes = await safe_list_submission_episodes(submission.id, limiter)
         if episodes:
             updates["episodes"] = episodes
 
@@ -135,11 +171,11 @@ async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry) -> KaggleLeade
     return entry.model_copy(update={"submissions": enriched_submissions})
 
 
-async def safe_list_submission_episodes(submission_id: int) -> list[KaggleEpisode]:
+async def safe_list_submission_episodes(submission_id: int, limiter: KaggleRefreshLimiter) -> list[KaggleEpisode]:
     if settings.kaggle_leaderboard_episodes_per_submission <= 0 or submission_id <= 0:
         return []
     try:
-        episodes = await kaggle.list_episodes(submission_id)
+        episodes = await kaggle_refresh_call(limiter, lambda: kaggle.list_episodes(submission_id))
     except HTTPException:
         return []
     except Exception:

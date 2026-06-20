@@ -185,6 +185,19 @@ def test_kaggle_base_url_rejects_non_kaggle_hosts(monkeypatch):
         normalize_kaggle_base_url("https://metadata.google.internal")
 
 
+def test_kaggle_rate_limit_preserves_429_status():
+    client = KaggleClient("https://www.kaggle.com", KaggleCredentials(mode="none"), max_response_bytes=1024)
+
+    class FakeResponse:
+        status_code = 429
+
+    with pytest.raises(HTTPException) as error:
+        client._decode_response(FakeResponse(), b"{}")
+
+    assert error.value.status_code == 429
+    assert error.value.detail == "Kaggle rate limit was reached."
+
+
 @pytest.mark.anyio
 async def test_kaggle_response_size_is_capped():
     client = KaggleClient("https://www.kaggle.com", KaggleCredentials(mode="none"), max_response_bytes=3)

@@ -35,6 +35,8 @@ class Settings:
     kaggle_leaderboard_team_submission_limit: int
     kaggle_leaderboard_submissions_per_team: int
     kaggle_leaderboard_episodes_per_submission: int
+    kaggle_leaderboard_rate_pause_after_calls: int
+    kaggle_leaderboard_rate_pause_seconds: int
     admin_token: str
     allow_public_imports: bool
     max_replay_bytes: int
@@ -58,8 +60,10 @@ def load_settings() -> Settings:
         kaggle_leaderboard_cache_seconds=bounded_int_env("KAGGLE_LEADERBOARD_CACHE_SECONDS", 1800, minimum=60, maximum=86_400),
         kaggle_leaderboard_page_size=bounded_int_env("KAGGLE_LEADERBOARD_PAGE_SIZE", 50, minimum=1, maximum=200),
         kaggle_leaderboard_team_submission_limit=bounded_int_env("KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT", 50, minimum=0, maximum=100),
-        kaggle_leaderboard_submissions_per_team=bounded_int_env("KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM", 2, minimum=0, maximum=20),
-        kaggle_leaderboard_episodes_per_submission=bounded_int_env("KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION", 2, minimum=0, maximum=20),
+        kaggle_leaderboard_submissions_per_team=bounded_int_env("KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM", 1, minimum=0, maximum=20),
+        kaggle_leaderboard_episodes_per_submission=bounded_int_env("KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION", 1, minimum=0, maximum=20),
+        kaggle_leaderboard_rate_pause_after_calls=bounded_int_env("KAGGLE_LEADERBOARD_RATE_PAUSE_AFTER_CALLS", 55, minimum=0, maximum=500),
+        kaggle_leaderboard_rate_pause_seconds=bounded_int_env("KAGGLE_LEADERBOARD_RATE_PAUSE_SECONDS", 65, minimum=0, maximum=300),
         admin_token=os.getenv("CABT_ADMIN_TOKEN", ""),
         allow_public_imports=os.getenv("CABT_ALLOW_PUBLIC_IMPORTS", "").lower() in {"1", "true", "yes"},
         max_replay_bytes=int(os.getenv("CABT_MAX_REPLAY_BYTES", str(25 * 1024 * 1024))),
