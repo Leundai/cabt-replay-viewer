@@ -18,6 +18,7 @@
   import type { ReplaySnapshot } from './lib/game/replay';
   import { cardInspectorStore } from './state/cardInspector.svelte';
   import { cardMotionStore } from './state/cardMotion.svelte';
+  import { localReplayStore } from './state/localReplayStore';
   import { replayStore } from './state/replay.svelte';
   import { viewSettingsStore } from './state/viewSettings.svelte';
   import { zoneViewerStore } from './state/zoneViewer.svelte';
@@ -106,6 +107,13 @@
 
   async function openStoredReplay(id: string) {
     activeLibraryReplayId = id;
+    // Local library is the source of truth; fall back to the API only for a
+    // deep-link to an id this browser hasn't cached locally.
+    const local = await localReplayStore.get(id);
+    if (local != null) {
+      await replayStore.loadData(local);
+      return;
+    }
     await replayStore.loadApiReplay(id);
   }
 

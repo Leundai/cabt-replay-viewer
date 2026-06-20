@@ -1,12 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
+    getReplayArtifact,
     importKaggleEpisode,
-    importReplayJson,
     kaggleStatus,
     listKaggleEpisodes,
     listKaggleSubmissions,
-    listReplays,
     readAdminToken,
     setAdminToken,
     type KaggleEpisode,
@@ -14,6 +13,7 @@
     type KaggleSubmission,
     type ReplaySummary,
   } from '../api/client';
+  import { localReplayStore } from '../../state/localReplayStore';
 
   const defaultCompetition = 'pokemon-tcg-ai-battle';
 
@@ -64,12 +64,21 @@
     libraryLoading = true;
     libraryError = '';
     try {
-      library = await listReplays(searchQuery);
+      library = await localReplayStore.list(searchQuery);
     } catch (error) {
       libraryError = error instanceof Error ? error.message : String(error);
       library = [];
     } finally {
       libraryLoading = false;
+    }
+  }
+
+  async function removeReplay(id: string) {
+    try {
+      await localReplayStore.remove(id);
+      await refreshLibrary();
+    } catch (error) {
+      libraryError = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -95,13 +104,14 @@
 
     try {
       const replayJson = JSON.parse(await file.text());
-      await openReplayData(replayJson);
       try {
-        const saved = await importReplayJson(replayJson, file.name);
-        await openStoredReplay(saved.id);
+        const saved = await localReplayStore.save(replayJson, file.name);
         await refreshLibrary();
+        await openStoredReplay(saved.id);
       } catch (error) {
+        // Couldn't persist locally — still show the replay so the drop isn't lost.
         libraryError = error instanceof Error ? error.message : String(error);
+        await openReplayData(replayJson);
       }
     } catch (error) {
       libraryError = error instanceof Error ? error.message : String(error);
@@ -141,9 +151,13 @@
     kaggleLoading = true;
     kaggleError = '';
     try {
-      const saved = await importKaggleEpisode(episodeId);
-      await openStoredReplay(saved.id);
+      // The server proxies the Kaggle fetch (needs credentials); we then pull the
+      // artifact and keep it in the local library so it lives here, not on a server.
+      const fetched = await importKaggleEpisode(episodeId);
+      const artifact = await getReplayArtifact(fetched.id);
+      const saved = await localReplayStore.save(artifact, fetched.name);
       await refreshLibrary();
+      await openStoredReplay(saved.id);
     } catch (error) {
       kaggleError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -251,21 +265,26 @@
       <p class="panel-error">{libraryError}</p>
     {/if}
     {#if library.length === 0}
-      <p class="empty">Imported Kaggle episodes and JSON files will appear here.</p>
+      <p class="empty">Saved in your browser. Drop a JSON or import a Kaggle episode to start.</p>
     {:else}
       <div class="replay-list">
         {#each library as item}
-          <button
-            type="button"
-            class:active={activeReplayId === item.id}
-            onclick={() => openStoredReplay(item.id)}
-          >
-            <span>
-              <strong>{item.name}</strong>
-              <small>{item.players.join(' vs ') || item.source}</small>
-            </span>
-            <small>{item.actionCount} actions</small>
-          </button>
+          <div class="replay-row" class:active={activeReplayId === item.id}>
+            <button type="button" class="replay-open" onclick={() => openStoredReplay(item.id)}>
+              <span>
+                <strong>{item.name}</strong>
+                <small>{item.players.join(' vs ') || item.source}</small>
+              </span>
+              <small>{item.actionCount} actions</small>
+            </button>
+            <button
+              type="button"
+              class="replay-delete"
+              aria-label={`Delete ${item.name}`}
+              title="Delete replay"
+              onclick={() => removeReplay(item.id)}
+            >&times;</button>
+          </div>
         {/each}
       </div>
     {/if}
@@ -350,7 +369,7 @@
   .replay-sidebar header,
   .panel-heading,
   .drop-target,
-  .replay-list button,
+  .replay-open,
   .submission-list button,
   .episode-list button {
     display: flex;
@@ -460,7 +479,7 @@
     gap: 8px;
   }
 
-  .replay-list button,
+  .replay-open,
   .submission-list button,
   .episode-list button {
     width: 100%;
@@ -469,7 +488,35 @@
     background: var(--surface-card-bg);
   }
 
-  .replay-list button.active,
+  .replay-row {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .replay-row .replay-open {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .replay-delete {
+    flex: 0 0 auto;
+    width: 30px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background: var(--surface-card-bg);
+    color: var(--text-muted);
+    font-size: 17px;
+    line-height: 1;
+  }
+
+  .replay-delete:hover {
+    border-color: var(--danger-border);
+    color: var(--danger-strong);
+  }
+
+  .replay-row.active .replay-open,
   .submission-list button.active {
     outline: 2px solid var(--accent-base);
     outline-offset: 1px;
