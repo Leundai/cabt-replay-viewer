@@ -33,7 +33,7 @@
 
   onMount(() => {
     const stopThemeSync = viewSettingsStore.startThemeSync();
-    void loadDemoReplay();
+    void loadInitialReplay();
     return stopThemeSync;
   });
 
@@ -42,6 +42,16 @@
     document.documentElement.dataset.themePreference = viewSettingsStore.themePreference;
     document.documentElement.style.colorScheme = viewSettingsStore.theme;
   });
+
+  async function loadInitialReplay() {
+    const params = new URLSearchParams(window.location.search);
+    const replayId = params.get('replayId');
+    if (replayId) {
+      await openStoredReplay(replayId);
+      return;
+    }
+    await loadDemoReplay();
+  }
 
   async function loadDemoReplay() {
     activeLibraryReplayId = 'demo';

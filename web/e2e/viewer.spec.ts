@@ -45,6 +45,13 @@ async function routeApi(page: Page) {
       await route.fallback();
       return;
     }
+    if (route.request().url().endsWith('/api/replays/upload-cabt-match/artifact')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        path: 'public/game-logs/cabt-match.json',
+      });
+      return;
+    }
     await fulfillReplays(route, imported ? [savedReplay] : []);
   });
 }
@@ -82,6 +89,14 @@ test('Downloaded JSON can be imported and appears in the saved replay library', 
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
   await expect(page.getByText('cabt-match.json')).toBeVisible();
   await expect(page.getByText('12 actions')).toBeVisible();
+});
+
+test('Saved replay can be opened from a direct link', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/?replayId=upload-cabt-match');
+
+  await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
+  await expect(page.getByText('State 0 / 12')).toBeVisible();
 });
 
 test('Kaggle panel reports server-side auth requirements without exposing secrets', async ({ page }) => {
