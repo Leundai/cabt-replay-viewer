@@ -51,14 +51,18 @@
 {/if}
 
 <style>
+  /* Centred in the viewport and bounded by it, so the modal is never clipped at
+     the top/bottom regardless of board insets, the right-rail width, or how many
+     cards it holds. Fixed positioning keeps it stable even if the table-shell is
+     wider than the viewport and scrolled. */
   .zone-viewer {
-    position: absolute;
-    z-index: 10;
-    left: calc((100vw - var(--board-right-rail)) / 2);
-    top: calc((var(--board-top-inset) + 100vh - var(--board-bottom-inset)) / 2);
-    width: min(1120px, calc(100vw - 220px));
-    max-height: min(88vh, 900px);
+    position: fixed;
+    z-index: 31;
+    left: 50%;
+    top: 50%;
     transform: translate(-50%, -50%);
+    width: min(1120px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 14px;
@@ -73,13 +77,13 @@
   }
 
   .zone-viewer-backdrop {
-    position: absolute;
+    position: fixed;
     inset: 0;
-    z-index: 9;
+    z-index: 30;
     padding: 0;
     border: 0;
     border-radius: 0;
-    background: transparent;
+    background: var(--overlay-backdrop-bg);
     box-shadow: none;
     cursor: default;
   }
@@ -110,12 +114,13 @@
 
   .zone-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(clamp(116px, 9vw, 142px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(clamp(96px, 9vw, 142px), 1fr));
     gap: 12px;
     align-content: start;
     align-items: start;
     min-height: 0;
-    max-height: min(70vh, 720px);
+    /* Fills the modal's flexible row and scrolls internally — no fixed cap that
+       could fight the modal's own viewport bound. */
     overflow: auto;
     padding: 2px 4px 8px 2px;
   }
