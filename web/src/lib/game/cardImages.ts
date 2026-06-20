@@ -38,6 +38,11 @@ export const setImageMap: Record<string, string | SetImageInfo> = {
   DRI: 'sv10',
   BLK: 'zsv10pt5',
   WHT: 'rsv10pt5',
+  // Scarlet & Violet Black Star Promos — the dataset tags these as either PROMO
+  // or SVP; both live under pokemontcg.io's `svp` set (verified for the numbers
+  // present here, e.g. Zacian ex 198, Pecharunt 149, Zapdos 157).
+  PROMO: 'svp',
+  SVP: 'svp',
   MEP: { id: 'mep', source: 'scrydex' },
   MEE: { id: 'mee', source: 'pkmncards' },
   MEG: 'me1',
