@@ -24,12 +24,12 @@ class KaggleClient:
             f"/api/v1/competitions/submissions/list/{competition}",
             params={"page": page, "pageSize": page_size},
         )
-        raw_items = data.get("submissions", data if isinstance(data, list) else [])
+        raw_items = data if isinstance(data, list) else data.get("submissions", [])
         return [normalize_submission(item) for item in raw_items if isinstance(item, dict)]
 
     async def list_episodes(self, submission_id: int) -> list[KaggleEpisode]:
         data = await self._get(f"/api/v1/competitions/submissions/{submission_id}/episodes")
-        raw_items = data.get("episodes", data if isinstance(data, list) else [])
+        raw_items = data if isinstance(data, list) else data.get("episodes", [])
         return [normalize_episode(item, submission_id) for item in raw_items if isinstance(item, dict)]
 
     async def get_replay(self, episode_id: int) -> Any:
