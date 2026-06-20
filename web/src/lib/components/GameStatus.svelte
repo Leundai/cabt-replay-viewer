@@ -19,17 +19,21 @@
 </div>
 
 <style>
+  /* Cinema HUD: a compact chip centred at the top edge, clear of the settings
+     gear (top-right) so the two never share an anchor. */
   .game-status {
     position: absolute;
-    top: 14px;
-    right: 14px;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 9;
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    white-space: nowrap;
     pointer-events: auto;
-    padding: 5px 9px;
+    padding: 5px 12px;
     border-radius: 999px;
     border: 1px solid var(--surface-toolbar-border);
     background: var(--surface-toolbar-bg);
@@ -37,6 +41,13 @@
     box-shadow: var(--surface-toolbar-shadow);
     backdrop-filter: blur(var(--backdrop-blur));
     font-size: 11px;
+    transition: opacity var(--dur-base, 220ms) var(--ease-out, ease);
+  }
+
+  .game-status span:not(:first-child)::before {
+    content: "·";
+    margin-right: 8px;
+    color: var(--text-muted);
   }
 
   .game-status strong {

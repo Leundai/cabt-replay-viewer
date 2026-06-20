@@ -56,11 +56,12 @@
     return node;
   }
 
-  function track(anim: Animation, node: HTMLElement) {
+  function track(anim: Animation, node: HTMLElement, onDone?: () => void) {
     activeAnims.push(anim);
     anim.onfinish = () => {
       node.remove();
       activeNodes = activeNodes.filter((n) => n !== node);
+      onDone?.();
     };
   }
 
@@ -113,9 +114,12 @@
     const hand = boxFor(`[data-testid="hand-${intent.ownerIndex}"]`, overlay);
 
     // Guard against a zero-size measured anchor so heroScale can never blow up
-    // to Infinity/NaN (which would emit an invalid scale() transform).
+    // to Infinity/NaN (which would emit an invalid scale() transform). Height is
+    // always derived from width at the true card ratio (63:88) — never the raw
+    // measured destination height, which can be non-card-shaped and made the
+    // surfaced reveal stretch or clip its bottom edge.
     const baseW = Math.max(1, dest ? dest.w : Math.min(124, overlay.width * 0.09));
-    const baseH = Math.max(1, dest ? dest.h : baseW * (88 / 63));
+    const baseH = baseW * (88 / 63);
     // Enlarge to a prominent hero size, but always capped to fit the board so
     // the surfaced card is never cut off, then clamp its centre to stay fully
     // on-screen regardless of where the board's geometric centre falls.
@@ -128,8 +132,15 @@
     const heroX = Math.min(Math.max(center.cx, halfW + margin), overlay.width - halfW - margin);
     const heroY = Math.min(Math.max(center.cy, halfH + margin), overlay.height - halfH - margin);
 
-    const node = makeNode('motion-reveal', baseW, baseH);
     const art = intent.card?.imageUrl ?? intent.card?.cardImage;
+    const name = intent.card?.name;
+    // Nothing meaningful to surface — skip the reveal entirely rather than
+    // flashing a blank card or the literal word "Card".
+    if (!art && !name) {
+      return;
+    }
+
+    const node = makeNode('motion-reveal', baseW, baseH);
     if (art) {
       const img = document.createElement('img');
       img.src = art;
@@ -137,9 +148,21 @@
       img.draggable = false;
       node.appendChild(img);
     } else {
-      const label = document.createElement('span');
-      label.textContent = intent.card?.name ?? 'Card';
-      node.appendChild(label);
+      // No resolvable art: render a real card face (name + set) like the
+      // inspector's fallback, never a bare label floating on white.
+      node.classList.add('is-fallback');
+      const face = document.createElement('div');
+      face.className = 'reveal-fallback';
+      const nameEl = document.createElement('strong');
+      nameEl.textContent = name ?? '';
+      face.appendChild(nameEl);
+      const setText = [intent.card?.set, intent.card?.setNumber].filter(Boolean).join(' ');
+      if (setText) {
+        const setEl = document.createElement('span');
+        setEl.textContent = setText;
+        face.appendChild(setEl);
+      }
+      node.appendChild(face);
     }
 
     if (reduced) {
@@ -161,6 +184,15 @@
     const origin: Box = hand ?? { x: 0, y: 0, w: baseW, h: baseH, cx: heroX, cy: overlay.height * 0.86 };
     const settle = dest ? frame(dest.cx, dest.cy, baseW, baseH, 1) : frame(heroX, heroY, baseW, baseH, heroScale * 0.92);
 
+    // When the card lands in a real board slot, the clone stays solid all the way
+    // down and the slot's hidden card is revealed the instant the clone is
+    // removed — one continuous card, no pop. Reveals that fade at centre (no slot)
+    // keep the fade-out. `releaseKey` reveals the suppressed slot on finish (also
+    // for the centre-fade fallback when the slot element wasn't found at runtime).
+    const releaseKey = intent.destSelector?.startsWith('slot-') ? intent.destSelector : null;
+    const landsInSlot = !!dest && !!releaseKey;
+    const endOpacity = landsInSlot ? 1 : 0;
+
     track(
       node.animate(
         [
@@ -169,11 +201,12 @@
           { offset: r1, transform: frame(heroX, heroY, baseW, baseH, heroScale), opacity: 1, easing: 'linear' },
           { offset: r2, transform: frame(heroX, heroY, baseW, baseH, heroScale), opacity: 1, easing: EASE_IN_OUT },
           { offset: 0.9, transform: settle, opacity: 1, easing: 'linear' },
-          { offset: 1, transform: settle, opacity: 0 },
+          { offset: 1, transform: settle, opacity: endOpacity },
         ],
         { duration: total, fill: 'backwards' },
       ),
       node,
+      releaseKey ? () => cardMotionStore.releaseDest(releaseKey) : undefined,
     );
   }
 
@@ -262,12 +295,35 @@
     -webkit-user-drag: none;
   }
 
-  .motion-overlay :global(.motion-reveal span) {
-    padding: 0 8px;
+  /* Fallback card face (no resolvable art) — mirrors the inspector's fallback so
+     a surfaced card always reads as a card, never a stray word on white. */
+  .motion-overlay :global(.motion-reveal.is-fallback) {
+    background: linear-gradient(180deg, #fbfcfe, #d9dee6);
+  }
+
+  .motion-overlay :global(.reveal-fallback) {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 6px;
+    padding: 10% 12%;
+    text-align: center;
+  }
+
+  /* Fixed sizes — the reveal node is transform-scaled to hero size, so the type
+     enlarges with it. */
+  .motion-overlay :global(.reveal-fallback strong) {
     color: #1d232b;
     font-size: 12px;
     font-weight: 900;
-    text-align: center;
-    line-height: 1.1;
+    line-height: 1.08;
+  }
+
+  .motion-overlay :global(.reveal-fallback span) {
+    color: #66707c;
+    font-size: 9px;
+    font-weight: 800;
   }
 </style>

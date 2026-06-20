@@ -51,6 +51,10 @@
           ? 'pokemon'
           : 'empty');
   let canInspect = $derived(!!card && !faceDown);
+  // When the card has no play action of its own (the replay-mode default), the
+  // whole face becomes the inspect target — clicking anywhere opens the preview
+  // instead of hunting for a tiny hover-only magnifier.
+  let inspectSurface = $derived(canInspect && !interactive);
 
   $effect(() => {
     if (imageUrl !== lastImageUrl) {
@@ -75,6 +79,7 @@
   class:compact
   class:playable
   class:interactive
+  class:inspectable={inspectSurface}
   class:disabled
   class={`card-tile ${typeClass}`}
   data-testid={testId || undefined}
@@ -109,11 +114,19 @@
       {ondragend}
       onselectstart={preventSelection}
     ></button>
-  {/if}
-  {#if canInspect}
+    {#if canInspect}
+      <button
+        type="button"
+        class="card-inspect-action"
+        aria-label={`Open ${card?.name ?? 'card'} preview`}
+        title="Open card preview"
+        onclick={inspectCard}
+      ></button>
+    {/if}
+  {:else if inspectSurface}
     <button
       type="button"
-      class="card-inspect-action"
+      class="card-inspect-surface"
       aria-label={`Open ${card?.name ?? 'card'} preview`}
       title="Open card preview"
       onclick={inspectCard}
@@ -144,7 +157,8 @@
 
   /* Hover lift only on real pointers — touch fires hover on tap. */
   @media (hover: hover) and (pointer: fine) {
-    .card-tile.interactive:hover:not(.disabled) {
+    .card-tile.interactive:hover:not(.disabled),
+    .card-tile.inspectable:hover {
       z-index: 4;
       transform: translateY(-6px);
       box-shadow: var(--glow-hover-shadow);
@@ -152,7 +166,8 @@
     }
 
     /* Press feedback: the card scales toward the cursor, confirming the click. */
-    .card-tile.interactive:active:not(.disabled) {
+    .card-tile.interactive:active:not(.disabled),
+    .card-tile.inspectable:active {
       transform: translateY(-6px) scale(0.97);
     }
   }
@@ -160,7 +175,9 @@
   /* Reduced motion keeps the glow (it aids comprehension) but drops the lift. */
   @media (prefers-reduced-motion: reduce) {
     .card-tile.interactive:hover:not(.disabled),
-    .card-tile.interactive:active:not(.disabled) {
+    .card-tile.interactive:active:not(.disabled),
+    .card-tile.inspectable:hover,
+    .card-tile.inspectable:active {
       transform: none;
     }
   }
@@ -209,6 +226,32 @@
   }
 
   .card-primary-action:focus-visible {
+    outline: 2px solid var(--selection-border-strong);
+    outline-offset: 2px;
+  }
+
+  /* Full-face inspect target for replay/non-interactive cards: click anywhere on
+     the card to open the preview. Transparent, fills the tile, sits above the art
+     but below transient overlays like the damage counter. */
+  .card-inspect-surface {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    box-shadow: none;
+    cursor: zoom-in;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .card-inspect-surface:focus-visible {
     outline: 2px solid var(--selection-border-strong);
     outline-offset: 2px;
   }

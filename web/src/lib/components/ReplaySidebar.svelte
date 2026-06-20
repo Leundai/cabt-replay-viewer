@@ -335,12 +335,16 @@
     display: grid;
     align-content: start;
     gap: 14px;
-    min-height: 100vh;
+    /* Own the full grid-cell height and scroll internally so no control is ever
+       clipped off-screen, however tall the Kaggle lists grow. */
+    min-height: 0;
+    height: 100%;
     padding: 18px;
     border-right: 1px solid var(--surface-toolbar-border);
     background: var(--surface-toolbar-bg);
     box-shadow: var(--surface-toolbar-shadow);
-    overflow: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .replay-sidebar header,

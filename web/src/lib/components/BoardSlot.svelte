@@ -74,6 +74,10 @@
   // WAAPI cancel always leaves the node clean.
   let slotRoot = $state<HTMLDivElement>();
   let slotKeyValue = $derived(`slot-${slot.ownerIndex}-${slot.slot}-${slot.index}`);
+  // While a play-clone is flying toward this slot, hide the real card so it does
+  // not pop into place before the cinematic lands. The store seeds this in the
+  // same flush as the snapshot, so there is never a one-frame flash.
+  let incoming = $derived(cardMotionStore.isSuppressed(slotKeyValue));
   // Seed from the live batch so a remount doesn't replay an in-flight batch.
   let appliedBatchId = cardMotionStore.batch?.batchId ?? 0;
   let activeAnims: Animation[] = [];
@@ -230,6 +234,7 @@
   tabindex="0"
   class:active
   class:empty={slot.empty}
+  class:motion-incoming={incoming}
   class={`board-slot ${placement}`}
   data-testid={`slot-${slot.ownerIndex}-${slot.slot}-${slot.index}`}
   data-owner-index={slot.ownerIndex}
@@ -337,6 +342,13 @@
   .board-slot.empty {
     border: 1px dashed var(--slot-empty-border);
     background: var(--slot-empty-bg);
+  }
+
+  /* Card + its badges stay laid out (so the clone has a target box) but are
+     invisible until the flying clone lands and the store releases this slot.
+     visibility (not opacity) so an in-flight cardSwap transition can't reveal it. */
+  .board-slot.motion-incoming > * {
+    visibility: hidden;
   }
 
   .slot-card {

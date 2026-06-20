@@ -17,7 +17,10 @@
 </script>
 
 <details class="board-perspective-controls">
-  <summary aria-label="Board perspective settings" title="Board perspective settings">⚙</summary>
+  <summary aria-label="Board perspective settings" title="Board perspective settings">
+    <span>Board perspective</span>
+    <span class="chevron" aria-hidden="true">⌄</span>
+  </summary>
   <div class="board-perspective-menu">
     <strong>Board perspective</strong>
     <label>
@@ -53,20 +56,30 @@
   }
 
   .board-perspective-controls summary {
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     width: 100%;
-    height: 34px;
+    height: 32px;
+    padding: 0 9px;
     border: 1px solid var(--button-border);
     border-radius: 6px;
     background: var(--button-bg);
-    box-shadow: var(--surface-toolbar-shadow);
     color: var(--button-text);
     cursor: pointer;
-    font-size: 17px;
+    font-size: 11px;
+    font-weight: 800;
     line-height: 1;
     user-select: none;
-    backdrop-filter: blur(var(--backdrop-blur));
+  }
+
+  .board-perspective-controls .chevron {
+    transition: transform var(--transition-fast);
+    font-size: 13px;
+  }
+
+  .board-perspective-controls[open] .chevron {
+    transform: rotate(180deg);
   }
 
   .board-perspective-controls summary::marker,

@@ -32,7 +32,9 @@
     --hand-hover-clearance: calc(var(--hand-hover-pad) + 12px);
     --hand-shadow-clearance: calc(var(--hand-hover-pad) + 14px);
     --board-bottom-inset: calc((var(--hand-card-w) * 1.397) + (var(--hand-hover-pad) * 2.5) + 14px + var(--replay-dock-h));
-    --board-right-rail: 150px;
+    /* Cinema HUD reclaims the old right-side panel column — chrome is now a small
+       top-right gear popover and a full-width dock, so the board uses the width. */
+    --board-right-rail: 20px;
     --table-side-gap: 14px;
     --player-panel-right: calc(var(--board-right-rail) + 8px);
     --board-h: calc(100vh - var(--board-top-inset) - var(--board-bottom-inset));

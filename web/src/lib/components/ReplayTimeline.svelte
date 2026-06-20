@@ -41,6 +41,7 @@
     setPlaybackSpeed = () => {},
   }: Props = $props();
 
+  let showInfo = $state(false);
   let maxStepIndex = $derived(Math.max(0, replay.steps.length - 1));
   let maxStateIndex = $derived(Math.max(0, replay.stateCount - 1));
   let actionValue = $derived(step.actionIndex === null ? 'Initial' : `${step.actionIndex + 1} / ${replay.actionCount}`);
@@ -105,11 +106,19 @@
     </label>
     <button aria-label="Next action" onclick={nextStep} disabled={stepIndex >= maxStepIndex}>&gt;</button>
     <button aria-label="Last action" onclick={lastStep} disabled={stepIndex >= maxStepIndex}>&gt;|</button>
+    <button
+      class="info-toggle"
+      class:active={showInfo}
+      aria-label="Replay details"
+      aria-expanded={showInfo}
+      title="Replay details"
+      onclick={() => (showInfo = !showInfo)}
+    >i</button>
   </div>
-</section>
 
-<aside class="replay-details" aria-label="Replay details">
-  <div class="replay-meta">
+  {#if showInfo}
+  <aside class="replay-details" aria-label="Replay details">
+    <div class="replay-meta">
     <strong>{replay.name}</strong>
     <span>{playerLabel}</span>
     <span>{createdLabel}</span>
@@ -137,16 +146,18 @@
     <button onclick={copyForkPoint}>{copiedForkPoint ? 'Fork point copied' : 'Copy fork point'}</button>
   </div>
 
-  {#if payloadPreview}
-    <pre>{payloadPreview}</pre>
+    {#if payloadPreview}
+      <pre>{payloadPreview}</pre>
+    {/if}
+  </aside>
   {/if}
-</aside>
+</section>
 
 <style>
   .replay-dock {
     position: absolute;
     left: 0;
-    right: var(--board-right-rail);
+    right: 0;
     bottom: 0;
     z-index: 12;
     height: var(--replay-dock-h, 48px);
@@ -158,6 +169,7 @@
     color: var(--text-primary);
     box-shadow: var(--surface-toolbar-shadow);
     backdrop-filter: blur(var(--backdrop-blur));
+    transition: opacity var(--dur-base, 220ms) var(--ease-out, ease);
   }
 
   .replay-caption {
@@ -196,21 +208,30 @@
     line-height: 1;
   }
 
+  /* Replay details popover — anchored just above the dock instead of floating at
+     a hard-coded coordinate. Opens from the dock's "i" toggle. */
   .replay-details {
     position: absolute;
-    top: 414px;
+    bottom: calc(var(--replay-dock-h, 48px) + 8px);
     right: 14px;
-    z-index: 9;
-    width: 148px;
+    z-index: 13;
+    width: 240px;
+    max-height: min(60vh, 420px);
+    overflow: auto;
     display: grid;
     gap: 8px;
-    padding: 7px;
+    padding: 10px;
     border: 1px solid var(--surface-toolbar-border);
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--surface-toolbar-bg);
     color: var(--text-primary);
     box-shadow: var(--surface-toolbar-shadow);
     backdrop-filter: blur(var(--backdrop-blur));
+
+    @starting-style {
+      opacity: 0;
+      transform: translateY(6px);
+    }
   }
 
   .replay-meta,
@@ -267,11 +288,25 @@
   }
 
   .replay-controls {
-    grid-template-columns: 32px 32px 64px minmax(0, 1fr) 88px 32px 32px;
+    grid-template-columns: 32px 32px 64px minmax(0, 1fr) 88px 32px 32px 32px;
   }
 
   .play-toggle {
     width: 64px !important;
+  }
+
+  .info-toggle {
+    width: 32px;
+    height: 30px;
+    padding: 0;
+    font-style: italic;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+
+  .info-toggle.active {
+    border-color: var(--accent-base);
+    color: var(--accent-strong);
+    background: var(--accent-tint);
   }
 
   .speed-control {
@@ -404,12 +439,16 @@
     }
 
     .replay-controls {
-      grid-template-columns: 30px 30px 54px minmax(0, 1fr) 72px 30px 30px;
+      grid-template-columns: 30px 30px 54px minmax(0, 1fr) 72px 30px 30px 30px;
       gap: 5px;
     }
 
     .play-toggle {
       width: 54px !important;
+    }
+
+    .info-toggle {
+      width: 30px;
     }
 
     .speed-control {
@@ -424,7 +463,8 @@
     }
 
     .replay-details {
-      display: none;
+      width: min(280px, calc(100vw - 24px));
+      right: 10px;
     }
   }
 </style>

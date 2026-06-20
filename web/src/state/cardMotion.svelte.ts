@@ -1,3 +1,4 @@
+import { SvelteSet } from 'svelte/reactivity';
 import type { GameView } from '../lib/game/types';
 import { prefersReducedMotion } from '../lib/motion';
 import type { ReplayPlaybackSpeedId } from './replayPlaybackModel';
@@ -41,9 +42,24 @@ export type OnStepArgs = {
 class CardMotionStore {
   batch = $state<MotionBatch | null>(null);
 
+  /** Slot keys whose real card is hidden while its play-clone is in flight, so
+   *  the board doesn't pop the card into place ahead of the cinematic. Seeded
+   *  synchronously when a batch publishes (same flush as the snapshot render, so
+   *  there is never a one-frame flash) and released as each clone lands. */
+  readonly suppressedDests = new SvelteSet<string>();
+
   #batchSeq = 0;
   #lastStepAt = 0;
   #clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+  isSuppressed(key: string): boolean {
+    return this.suppressedDests.has(key);
+  }
+
+  /** Reveal a landed card — called by the overlay when its clone settles. */
+  releaseDest(key: string): void {
+    this.suppressedDests.delete(key);
+  }
 
   /** Plan and (maybe) publish a motion batch for a step transition. */
   onStep(args: OnStepArgs): void {
@@ -104,11 +120,27 @@ class CardMotionStore {
       this.#clearTimer = null;
     }
     this.batch = batch;
+
+    // Re-seed suppressed destinations for this batch. Clearing first releases any
+    // card still hidden by a superseded batch, so nothing can get stuck invisible.
+    this.suppressedDests.clear();
+    if (batch && !batch.reduced) {
+      for (const travel of batch.travels) {
+        // Only cards that actually land in a slot are hidden; a reveal that fades
+        // at centre (no slot dest) has no real card to hand off to.
+        if (travel.kind === 'play' && travel.destSelector?.startsWith('slot-')) {
+          this.suppressedDests.add(travel.destSelector);
+        }
+      }
+    }
+
     if (batch && typeof setTimeout !== 'undefined') {
       // Tear the batch down once the longest effect has settled so no ghost
       // lingers into a later, un-stepped frame (the paused single-step case).
+      // Also a safety net: any card not released by its clone is revealed here.
       this.#clearTimer = setTimeout(() => {
         this.batch = null;
+        this.suppressedDests.clear();
         this.#clearTimer = null;
       }, batch.budgetMs + 220);
     }

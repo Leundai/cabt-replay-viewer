@@ -125,6 +125,19 @@ function findCardById(player: PlayerView, cardId: number): CardView | null {
   return flat.find((card) => card.id === cardId) ?? null;
 }
 
+/** Last-resort art lookup: scan every player's zones for the card's species id.
+ *  A played card can land in (or originate from) the other player's view, so a
+ *  single-player search sometimes misses the artwork and the reveal would skip. */
+function findCardAnywhere(view: GameView, cardId: number): CardView | null {
+  for (const player of view.players) {
+    const found = findCardById(player, cardId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
 function resolvePlayDestination(
   nextView: GameView,
   owner: number,
@@ -149,7 +162,7 @@ function resolvePlayDestination(
   }
   // Otherwise surface the played card's art (found in any zone) at centre and
   // fade — or, if it can't be located, show nothing rather than a wrong card.
-  return { selector: null, card: findCardById(player, cardId) };
+  return { selector: null, card: findCardById(player, cardId) ?? findCardAnywhere(nextView, cardId) };
 }
 
 /**
