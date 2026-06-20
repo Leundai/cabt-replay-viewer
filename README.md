@@ -87,11 +87,11 @@ development; that flag does not unlock admin Kaggle endpoints.
 
 The public leaderboard panel reads from a server-side cache. The viewer polls
 the cache, and the backend refreshes from Kaggle only when the cached snapshot
-is stale. The default cache window is 30 minutes:
+is stale. The default cache window is 10 minutes:
 
 ```bash
 KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
-KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
+KAGGLE_LEADERBOARD_CACHE_SECONDS=600
 KAGGLE_LEADERBOARD_PAGE_SIZE=50
 KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
 KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=1
@@ -124,7 +124,7 @@ CABT_ADMIN_TOKEN
 KAGGLE_USERNAME
 KAGGLE_KEY
 KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
-KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
+KAGGLE_LEADERBOARD_CACHE_SECONDS=600
 KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
 KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=1
 KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=5
