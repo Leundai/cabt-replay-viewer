@@ -99,7 +99,9 @@
 
   async function loadDemoReplay() {
     activeLibraryReplayId = 'demo';
-    await replayStore.loadSaved('cabt-match.json');
+    // A real recorded episode (Kazama Yusuke vs Leundai) so the demo shows real
+    // cards and art rather than synthetic placeholders.
+    await replayStore.loadSaved('leundai-kazama-lucario-carm.json');
   }
 
   async function openStoredReplay(id: string) {
