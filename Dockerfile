@@ -14,10 +14,10 @@ COPY api/requirements.lock ./api/requirements.lock
 RUN pip install --no-cache-dir --require-hashes -r api/requirements.lock
 COPY --chown=app:app api ./api
 COPY --chown=app:app --from=web /app/web/dist ./api/app/static
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 ENV CABT_STATIC_DIR=/app/api/app/static
 ENV CABT_DATA_DIR=/data
 ENV PORT=8080
-RUN mkdir -p /data && chown app:app /data
-USER app
+RUN mkdir -p /data && chown app:app /data && chmod +x ./docker-entrypoint.sh
 EXPOSE 8080
-CMD ["sh", "-c", "python -m uvicorn api.app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["./docker-entrypoint.sh"]

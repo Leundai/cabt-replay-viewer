@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import httpx
 from fastapi import HTTPException
 
 from api.app.kaggle_client import KaggleClient, normalize_episode, normalize_leaderboard_entry, normalize_submission
@@ -85,6 +86,39 @@ async def test_kaggle_leaderboard_response_shape_is_supported(monkeypatch):
     assert entries[0].teamId == 10
     assert entries[0].teamName == "Alpha"
     assert next_page_token == "next"
+
+
+@pytest.mark.anyio
+async def test_kaggle_transport_errors_return_502(monkeypatch):
+    client = KaggleClient("https://example.com", KaggleCredentials(mode="bearer", bearer_token="token"), max_response_bytes=1024)
+
+    class BrokenStream:
+        async def __aenter__(self):
+            raise httpx.ConnectError("network went away")
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return BrokenStream()
+
+    monkeypatch.setattr("api.app.kaggle_client.httpx.AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(HTTPException) as error:
+        await client.list_leaderboard("pokemon-tcg-ai-battle", page_size=2)
+
+    assert error.value.status_code == 502
+    assert error.value.detail == "Kaggle request could not be completed."
 
 
 def test_leaderboard_normalizer_tolerates_missing_team_id():

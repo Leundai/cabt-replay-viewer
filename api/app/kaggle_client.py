@@ -60,15 +60,18 @@ class KaggleClient:
         elif self.credentials.username and self.credentials.key:
             auth = httpx.BasicAuth(self.credentials.username, self.credentials.key)
 
-        async with httpx.AsyncClient(base_url=self.api_base_url, timeout=45.0, follow_redirects=False) as client:
-            async with client.stream(
-                "POST",
-                f"/v1/competitions.CompetitionApiService/{method}",
-                json=payload,
-                headers=headers,
-                auth=auth,
-            ) as response:
-                raw = await self._read_limited_response(response)
+        try:
+            async with httpx.AsyncClient(base_url=self.api_base_url, timeout=45.0, follow_redirects=False) as client:
+                async with client.stream(
+                    "POST",
+                    f"/v1/competitions.CompetitionApiService/{method}",
+                    json=payload,
+                    headers=headers,
+                    auth=auth,
+                ) as response:
+                    raw = await self._read_limited_response(response)
+        except httpx.HTTPError as error:
+            raise HTTPException(status_code=502, detail="Kaggle request could not be completed.") from error
 
         return self._decode_response(response, raw)
 
@@ -80,9 +83,12 @@ class KaggleClient:
         elif self.credentials.username and self.credentials.key:
             auth = httpx.BasicAuth(self.credentials.username, self.credentials.key)
 
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=45.0, follow_redirects=False) as client:
-            async with client.stream("GET", path, params=params, headers=headers, auth=auth) as response:
-                raw = await self._read_limited_response(response)
+        try:
+            async with httpx.AsyncClient(base_url=self.base_url, timeout=45.0, follow_redirects=False) as client:
+                async with client.stream("GET", path, params=params, headers=headers, auth=auth) as response:
+                    raw = await self._read_limited_response(response)
+        except httpx.HTTPError as error:
+            raise HTTPException(status_code=502, detail="Kaggle request could not be completed.") from error
 
         return self._decode_response(response, raw)
 

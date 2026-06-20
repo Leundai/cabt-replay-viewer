@@ -42,3 +42,18 @@ def test_leaderboard_cache_marks_expired_snapshot_stale(tmp_path):
     assert loaded.stale is True
     assert loaded.refreshInSeconds == 0
     assert loaded.source == "stale"
+
+
+def test_leaderboard_cache_get_tolerates_unwritable_root(tmp_path, monkeypatch):
+    cache = LeaderboardCache(tmp_path, ttl_seconds=1800)
+
+    def broken_ensure():
+        raise PermissionError("nope")
+
+    monkeypatch.setattr(cache, "ensure", broken_ensure)
+
+    loaded = cache.get("pokemon-tcg-ai-battle")
+
+    assert loaded.entries == []
+    assert loaded.source == "empty"
+    assert loaded.message == "Leaderboard cache is not writable."

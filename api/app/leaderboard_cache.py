@@ -17,7 +17,10 @@ class LeaderboardCache:
         self._lock = threading.Lock()
 
     def get(self, competition: str) -> KaggleLeaderboardSnapshot:
-        self.ensure()
+        try:
+            self.ensure()
+        except OSError:
+            return self._empty_snapshot(competition, message="Leaderboard cache is not writable.")
         path = self._path(competition)
         if not path.exists():
             return self._empty_snapshot(competition)

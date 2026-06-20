@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from api.app.models import KaggleLeaderboardEntry
-from api.app.main import app, read_limited_json_body, store
+from api.app.main import app, leaderboard_cache, read_limited_json_body, store
 from api.app.settings import KaggleCredentials
 
 
@@ -99,6 +101,51 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
     assert first.json()["entries"][0]["teamName"] == "Alpha"
     assert second.json()["source"] == "cache"
     assert calls == [("pokemon-tcg-ai-battle", 2)]
+
+
+def test_leaderboard_refresh_failure_returns_empty_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
+
+    async def broken_list_leaderboard(competition: str, page_size: int):
+        raise RuntimeError("network went away")
+
+    monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", broken_list_leaderboard)
+
+    client = TestClient(app)
+    response = client.get("/api/kaggle/leaderboard")
+
+    assert response.status_code == 200
+    assert response.json()["entries"] == []
+    assert response.json()["source"] == "empty"
+    assert response.json()["stale"] is True
+
+
+def test_leaderboard_refresh_failure_returns_stale_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
+    leaderboard_cache.save(
+        "pokemon-tcg-ai-battle",
+        [KaggleLeaderboardEntry(rank=1, teamId=123, teamName="Alpha", score="100.0")],
+        page_size=2,
+    )
+
+    async def broken_list_leaderboard(competition: str, page_size: int):
+        raise RuntimeError("network went away")
+
+    monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", broken_list_leaderboard)
+
+    client = TestClient(app)
+
+    path = tmp_path / "leaderboards" / "pokemon-tcg-ai-battle.json"
+    data = json.loads(path.read_text())
+    data["expiresAt"] = "2000-01-01T00:00:00+00:00"
+    path.write_text(json.dumps(data))
+    stale = client.get("/api/kaggle/leaderboard")
+
+    assert stale.status_code == 200
+    assert stale.json()["entries"][0]["teamName"] == "Alpha"
+    assert stale.json()["source"] == "stale"
 
 
 def test_leaderboard_admin_refresh_requires_token(tmp_path, monkeypatch):

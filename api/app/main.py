@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
 from typing import Any
 
@@ -107,16 +108,36 @@ async def get_leaderboard_snapshot(competition: str, *, refresh_if_stale: bool, 
                 page_size=settings.kaggle_leaderboard_page_size,
             )
         except HTTPException as error:
-            if snapshot.entries:
-                detail = error.detail if isinstance(error.detail, str) else "Kaggle refresh failed."
-                return snapshot.model_copy(update={"source": "stale", "stale": True, "message": f"{detail} Showing stale cache."})
-            raise
-        return leaderboard_cache.save(
-            competition,
-            entries,
-            page_size=settings.kaggle_leaderboard_page_size,
-            next_page_token=next_page_token,
-        )
+            detail = error.detail if isinstance(error.detail, str) else "Kaggle refresh failed."
+            return stale_leaderboard_snapshot(snapshot, f"{detail} Showing cached leaderboard only.")
+        except Exception:
+            return stale_leaderboard_snapshot(snapshot, "Kaggle refresh failed. Showing cached leaderboard only.")
+
+        try:
+            return leaderboard_cache.save(
+                competition,
+                entries,
+                page_size=settings.kaggle_leaderboard_page_size,
+                next_page_token=next_page_token,
+            )
+        except OSError:
+            now = datetime.now(timezone.utc)
+            return KaggleLeaderboardSnapshot(
+                competition=competition,
+                entries=entries,
+                refreshedAt=now.isoformat(),
+                expiresAt=(now + timedelta(seconds=settings.kaggle_leaderboard_cache_seconds)).isoformat(),
+                stale=True,
+                refreshInSeconds=0,
+                pageSize=settings.kaggle_leaderboard_page_size,
+                nextPageToken=next_page_token,
+                source="kaggle",
+                message="Leaderboard refreshed from Kaggle, but the cache could not be saved.",
+            )
+
+
+def stale_leaderboard_snapshot(snapshot: KaggleLeaderboardSnapshot, message: str) -> KaggleLeaderboardSnapshot:
+    return snapshot.model_copy(update={"source": "stale" if snapshot.entries else "empty", "stale": True, "refreshInSeconds": 0, "message": message})
 
 
 async def read_limited_json_body(request: Request) -> Any:
