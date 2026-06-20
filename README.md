@@ -95,7 +95,7 @@ KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
 KAGGLE_LEADERBOARD_PAGE_SIZE=50
 KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
 KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=1
-KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=1
+KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=5
 KAGGLE_LEADERBOARD_RATE_PAUSE_AFTER_CALLS=55
 KAGGLE_LEADERBOARD_RATE_PAUSE_SECONDS=65
 ```
@@ -103,8 +103,10 @@ KAGGLE_LEADERBOARD_RATE_PAUSE_SECONDS=65
 Leaderboard refreshes also cache recent public submissions and episode IDs for
 the top 50 teams by default. Public replay clicks are allowed only for episode
 IDs already present in that cached leaderboard snapshot. The enrichment limits
-and pause settings above keep the pull batch bounded and avoid Kaggle 429s; set
-the team limit to `0` to cache standings only.
+and pause settings above keep the pull batch bounded and avoid Kaggle 429s. The
+episode limit stores multiple recent matchups from each already-fetched
+submission response; raising the submission limit is what increases Kaggle call
+volume. Set the team limit to `0` to cache standings only.
 
 Saved replay artifacts are publicly readable from the hosted replay library. Use
 local JSON drag/drop for private inspection, and only save/import replays that
@@ -125,7 +127,7 @@ KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
 KAGGLE_LEADERBOARD_CACHE_SECONDS=1800
 KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
 KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=1
-KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=1
+KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=5
 KAGGLE_LEADERBOARD_RATE_PAUSE_AFTER_CALLS=55
 KAGGLE_LEADERBOARD_RATE_PAUSE_SECONDS=65
 ```

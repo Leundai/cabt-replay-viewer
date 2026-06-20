@@ -46,6 +46,32 @@ const leaderboardSnapshot = {
               competitionName: 'pokemon-tcg-ai-battle',
               reward: '1',
               status: 'complete',
+              agents: [
+                { submissionId: 111, teamId: 16376775, teamName: 'TrustHub hiroingk', reward: '1' },
+                { submissionId: 222, teamId: 16378170, teamName: 'The Debauchery Tea Party', reward: '-1' },
+              ],
+            },
+            {
+              id: 9002,
+              submissionId: 111,
+              competitionName: 'pokemon-tcg-ai-battle',
+              reward: '-1',
+              status: 'complete',
+              agents: [
+                { submissionId: 111, teamId: 16376775, teamName: 'TrustHub hiroingk', reward: '-1' },
+                { submissionId: 333, teamId: 16393904, teamName: 'InkCartridge', reward: '1' },
+              ],
+            },
+            {
+              id: 9003,
+              submissionId: 111,
+              competitionName: 'pokemon-tcg-ai-battle',
+              reward: '1',
+              status: 'complete',
+              agents: [
+                { submissionId: 111, teamId: 16376775, teamName: 'TrustHub hiroingk', reward: '1' },
+                { submissionId: 444, teamId: 16394000, teamName: 'Kazama', reward: '-1' },
+              ],
             },
           ],
         },
@@ -220,6 +246,10 @@ test('Card cinematics fire on the matching action frames', async ({ page }) => {
   await page.goto('/?replayId=upload-cabt-match');
 
   await expect(page.getByLabel('Action step')).toHaveValue('0');
+  await expect(page.locator('[data-testid="motion-overlay"]')).toBeVisible();
+  await expect(page.locator('[data-testid="deck-pile-0"]')).toBeVisible();
+  await expect(page.locator('[data-testid="hand-0"]')).toBeVisible();
+  await page.waitForTimeout(300);
   const next = page.getByRole('button', { name: 'Next action' });
   // Step deliberately (spaced) so the rapid-step gate treats each as a real step.
   for (let i = 0; i < 8; i += 1) {
@@ -337,11 +367,14 @@ test('Cached leaderboard is visible without exposing admin controls', async ({ p
   await page.goto('/');
 
   await expect(page.getByText('Leaderboard', { exact: true })).toBeVisible();
-  await expect(page.getByText('TrustHub hiroingk')).toBeVisible();
+  await expect(page.getByText('TrustHub hiroingk', { exact: true })).toBeVisible();
   await expect(page.getByText('1307.9').first()).toBeVisible();
   await expect(page.getByText('Submission #111')).toBeVisible();
-  await expect(page.getByText('Replay 9001')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Replay 9001' })).toBeVisible();
+  const replaySummary = page.locator('summary').filter({ hasText: '3 replays' });
+  await expect(replaySummary).toBeVisible();
+  await replaySummary.click();
+  await expect(page.getByText('TrustHub hiroingk vs The Debauchery Tea Party').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Episode 9001/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Load submissions' })).toHaveCount(0);
   await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toHaveCount(0);
 });
@@ -350,10 +383,11 @@ test('Cached leaderboard replay opens without admin unlock', async ({ page }) =>
   await routeApi(page);
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Replay 9001' }).click();
+  await page.locator('summary').filter({ hasText: '3 replays' }).click();
+  await page.getByRole('button', { name: /Episode 9001/ }).click();
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
   await expect(page.getByLabel('Action step')).toHaveValue('0');
-  await expect(page.getByText('TrustHub hiroingk vs The Debauchery Tea Party')).toBeVisible();
+  await expect(page.getByText('TrustHub hiroingk vs The Debauchery Tea Party').first()).toBeVisible();
   await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toHaveCount(0);
 });
 
@@ -369,7 +403,7 @@ test('Kaggle admin controls unlock only after hotkey and password', async ({ pag
   await page.getByPlaceholder('CABT_ADMIN_TOKEN').fill('test-token');
   await page.getByRole('button', { name: 'Unlock' }).click();
   await expect(page.getByRole('button', { name: 'Load submissions' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Replay 9001' })).toBeVisible();
+  await expect(page.locator('summary').filter({ hasText: '3 replays' })).toBeVisible();
   await page.getByRole('button', { name: 'Load submissions' }).click();
   await expect(page.getByText('#111 - 1307.9')).toBeVisible();
 });

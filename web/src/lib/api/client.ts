@@ -26,6 +26,15 @@ export type KaggleEpisode = {
   reward?: number | string;
   status?: string;
   date?: string;
+  agents?: KaggleEpisodeAgent[];
+};
+
+export type KaggleEpisodeAgent = {
+  submissionId?: number;
+  teamId?: number;
+  teamName?: string;
+  reward?: number | string;
+  status?: string;
 };
 
 export type KaggleSubmission = {

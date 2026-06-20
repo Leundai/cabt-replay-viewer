@@ -101,7 +101,11 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
 
     async def fake_list_episodes(submission_id: int):
         episode_calls.append(submission_id)
-        return [KaggleEpisode(id=9001, submissionId=submission_id)]
+        return [
+            KaggleEpisode(id=9001, submissionId=submission_id),
+            KaggleEpisode(id=9002, submissionId=submission_id),
+            KaggleEpisode(id=9003, submissionId=submission_id),
+        ]
 
     monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", fake_list_leaderboard)
     monkeypatch.setattr("api.app.main.kaggle.list_team_submissions", fake_list_team_submissions)
@@ -116,6 +120,7 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
     assert first.json()["entries"][0]["teamName"] == "Alpha"
     assert first.json()["entries"][0]["submissions"][0]["id"] == 111
     assert first.json()["entries"][0]["submissions"][0]["episodes"][0]["id"] == 9001
+    assert [episode["id"] for episode in first.json()["entries"][0]["submissions"][0]["episodes"]] == [9001, 9002]
     assert second.json()["source"] == "cache"
     assert calls == [("pokemon-tcg-ai-battle", 2)]
     assert submission_calls == [(123, "Alpha")]

@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 from fastapi import HTTPException
 
-from .models import KaggleEpisode, KaggleLeaderboardEntry, KaggleSubmission
+from .models import KaggleEpisode, KaggleEpisodeAgent, KaggleLeaderboardEntry, KaggleSubmission
 from .settings import KaggleCredentials
 
 
@@ -176,6 +176,11 @@ def normalize_leaderboard_entry(item: dict[str, Any], rank: int) -> KaggleLeader
 
 def normalize_episode(item: dict[str, Any], fallback_submission_id: int | None = None) -> KaggleEpisode:
     agents = item.get("agents") if isinstance(item.get("agents"), list) else []
+    normalized_agents = [
+        normalize_episode_agent(agent)
+        for agent in agents
+        if isinstance(agent, dict)
+    ]
     matching_agent = next(
         (
             agent
@@ -195,6 +200,17 @@ def normalize_episode(item: dict[str, Any], fallback_submission_id: int | None =
         reward=value(matching_agent, "reward"),
         status=value(item, "state", "status"),
         date=value(item, "createTime", "date"),
+        agents=normalized_agents,
+    )
+
+
+def normalize_episode_agent(item: dict[str, Any]) -> KaggleEpisodeAgent:
+    return KaggleEpisodeAgent(
+        submissionId=parse_optional_int(value(item, "submissionId", "submission_id")),
+        teamId=parse_optional_int(value(item, "teamId", "team_id")),
+        teamName=value(item, "teamName", "team_name"),
+        reward=value(item, "reward"),
+        status=value(item, "state", "status"),
     )
 
 

@@ -30,13 +30,22 @@ class KaggleStatus(BaseModel):
     message: str
 
 
+class KaggleEpisodeAgent(BaseModel):
+    submissionId: int | None = None
+    teamId: int | None = None
+    teamName: str | None = None
+    reward: str | float | int | None = None
+    status: str | None = None
+
+
 class KaggleEpisode(BaseModel):
     id: int
     submissionId: int | None = None
     competitionName: str | None = None
-    reward: str | float | None = None
+    reward: str | float | int | None = None
     status: str | None = None
     date: str | None = None
+    agents: list[KaggleEpisodeAgent] = Field(default_factory=list)
 
 
 class KaggleSubmission(BaseModel):

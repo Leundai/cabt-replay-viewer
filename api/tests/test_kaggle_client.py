@@ -165,8 +165,8 @@ def test_episode_normalizer_prefers_matching_submission_agent():
             "episodeId": 9001,
             "competitionName": "pokemon-tcg-ai-battle",
             "agents": [
-                {"submissionId": 222, "reward": "0"},
-                {"submissionId": 111, "reward": "1"},
+                {"submissionId": 222, "teamId": 20, "teamName": "Rival Bot", "reward": "0"},
+                {"submissionId": 111, "teamId": 10, "teamName": "TrustHub hiroingk", "reward": "1"},
             ],
         },
         fallback_submission_id=111,
@@ -176,6 +176,9 @@ def test_episode_normalizer_prefers_matching_submission_agent():
     assert episode.submissionId == 111
     assert episode.competitionName == "pokemon-tcg-ai-battle"
     assert episode.reward == "1"
+    assert [agent.teamName for agent in episode.agents] == ["Rival Bot", "TrustHub hiroingk"]
+    assert episode.agents[0].submissionId == 222
+    assert episode.agents[1].teamId == 10
 
 
 def test_kaggle_base_url_rejects_non_kaggle_hosts(monkeypatch):

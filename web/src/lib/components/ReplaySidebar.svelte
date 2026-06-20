@@ -304,6 +304,13 @@
           episode.reward,
           episode.status,
           episode.date,
+          ...(episode.agents ?? []).flatMap((agent) => [
+            agent.submissionId,
+            agent.teamId,
+            agent.teamName,
+            agent.reward,
+            agent.status,
+          ]),
         ]),
       ]),
     ].some((value) => String(value ?? '').toLowerCase().includes(normalized)));
@@ -333,6 +340,36 @@
       formatDate(submission.date),
       submission.status,
     ].filter(Boolean).join(' - ');
+  }
+
+  function formatEpisodeMatchup(
+    episode: KaggleEpisode,
+    submission: KaggleSubmission,
+    entry: KaggleLeaderboardEntry,
+  ): string {
+    const names = (episode.agents ?? [])
+      .map((agent) => agent.teamName || (agent.teamId ? `Team ${agent.teamId}` : agent.submissionId ? `Submission #${agent.submissionId}` : ''))
+      .filter(Boolean);
+    if (names.length >= 2) {
+      return names.slice(0, 2).join(' vs ');
+    }
+    if (names.length === 1) {
+      return names[0];
+    }
+    return submission.teamName || entry.teamName || `Submission #${submission.id}`;
+  }
+
+  function formatEpisodeMeta(episode: KaggleEpisode): string {
+    return [
+      `Episode ${episode.id}`,
+      episode.reward !== undefined && episode.reward !== null ? `Reward ${episode.reward}` : '',
+      episode.status,
+      formatDate(episode.date),
+    ].filter(Boolean).join(' - ');
+  }
+
+  function replayCountLabel(count: number): string {
+    return `${count} ${count === 1 ? 'replay' : 'replays'}`;
   }
 
   function formatDate(value: string | undefined | null): string {
@@ -453,18 +490,41 @@
                       <small>{formatSubmissionMeta(submission)}</small>
                     </span>
                     {#if submission.episodes?.length}
-                      <div class="leaderboard-episodes">
-                        {#each submission.episodes as episode}
-                          <button
-                            type="button"
-                            class="episode-pill"
-                            disabled={leaderboardReplayLoadingId !== null}
-                            onclick={() => openCachedLeaderboardEpisode(episode.id)}
-                          >
-                            {leaderboardReplayLoadingId === episode.id ? 'Opening...' : `Replay ${episode.id}`}
-                          </button>
-                        {/each}
-                      </div>
+                      {#if submission.episodes.length === 1}
+                        <div class="leaderboard-episodes">
+                          {#each submission.episodes as episode}
+                            <button
+                              type="button"
+                              class="episode-pill"
+                              disabled={leaderboardReplayLoadingId !== null}
+                              onclick={() => openCachedLeaderboardEpisode(episode.id)}
+                            >
+                              <span>{formatEpisodeMatchup(episode, submission, entry)}</span>
+                              <small>{leaderboardReplayLoadingId === episode.id ? 'Opening...' : formatEpisodeMeta(episode)}</small>
+                            </button>
+                          {/each}
+                        </div>
+                      {:else}
+                        <details class="episode-picker">
+                          <summary>
+                            <span>{replayCountLabel(submission.episodes.length)}</span>
+                            <small>{formatEpisodeMatchup(submission.episodes[0], submission, entry)}</small>
+                          </summary>
+                          <div class="leaderboard-episodes">
+                            {#each submission.episodes as episode}
+                              <button
+                                type="button"
+                                class="episode-pill"
+                                disabled={leaderboardReplayLoadingId !== null}
+                                onclick={() => openCachedLeaderboardEpisode(episode.id)}
+                              >
+                                <span>{formatEpisodeMatchup(episode, submission, entry)}</span>
+                                <small>{leaderboardReplayLoadingId === episode.id ? 'Opening...' : formatEpisodeMeta(episode)}</small>
+                              </button>
+                            {/each}
+                          </div>
+                        </details>
+                      {/if}
                     {/if}
                   </div>
                 {/each}
@@ -835,24 +895,85 @@
   }
 
   .leaderboard-episodes {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
     gap: 6px;
   }
 
-  .episode-pill {
-    display: inline-flex;
+  .episode-picker {
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+  }
+
+  .episode-picker summary {
+    display: grid;
+    grid-template-columns: auto 1fr;
     align-items: center;
-    min-height: 24px;
-    max-width: 100%;
-    padding: 3px 7px;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 7px;
     border: 1px solid var(--button-border);
-    border-radius: 999px;
+    border-radius: 6px;
     background: var(--button-bg);
     color: var(--button-text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 850;
+  }
+
+  .episode-picker summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .episode-picker summary span::before {
+    content: ">";
+    display: inline-block;
+    margin-right: 5px;
+    color: var(--text-secondary);
+    transition: transform 120ms ease;
+  }
+
+  .episode-picker[open] summary span::before {
+    transform: rotate(90deg);
+  }
+
+  .episode-picker summary small {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-secondary);
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .episode-pill {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    width: 100%;
+    min-height: 38px;
+    padding: 6px 7px;
+    border: 1px solid var(--button-border);
+    border-radius: 6px;
+    background: var(--button-bg);
+    color: var(--button-text);
+    text-align: left;
     font-size: 11px;
     font-weight: 850;
     line-height: 1.2;
+  }
+
+  .episode-pill span,
+  .episode-pill small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .episode-pill small {
+    color: var(--text-secondary);
+    font-weight: 750;
   }
 
   .replay-open,
