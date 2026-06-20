@@ -20,33 +20,17 @@ const basicEnergyIcons: Array<[RegExp, string]> = [
   [/\bColorless Energy\b/i, 'colorless'],
 ];
 
-const customEnergyIcons: Record<string, string> = {
-  'Double Turbo Energy': '/assets/energy/double-turbo.png',
-  'Jet Energy': '/assets/energy/jet.png',
-  'Gift Energy': '/assets/energy/gift.png',
-  'Mist Energy': '/assets/energy/mist.png',
-  'Luminous Energy': '/assets/energy/luminous.webp',
-  'Reversal Energy': '/assets/energy/reversal.webp',
-  'Therapeutic Energy': '/assets/energy/therapeutic.webp',
-  'Medical Energy': '/assets/energy/medical.webp',
-  'Boomerang Energy': '/assets/energy/boomerang.webp',
-  'Spiky Energy': '/assets/energy/spiky.webp',
-  "Team Rocket's Energy": '/assets/energy/team-rockets.webp',
-  'Prism Energy': '/assets/energy/prism.webp',
-  'Ignition Energy': '/assets/energy/ignition.webp',
-  'Enriching Energy': '/assets/energy/enriching.webp',
-  'Legacy Energy': '/assets/energy/legacy.png',
-  'Neo Upper Energy': '/assets/energy/neo-upper.png',
-  'Rock Fighting Energy': '/assets/energy/rock-fighting.webp',
-  'Growth Grass Energy': '/assets/energy/growth-grass.webp',
-  'Telepath Psychic Energy': '/assets/energy/telepath-psychic.webp',
-};
-
+/**
+ * One consistent icon family for EVERY attached energy. Basic and special energy
+ * alike resolve to the matte type symbol in /assets/energy-icons — derived from
+ * the energy's type (its name for the type-named specials like "Rock Fighting
+ * Energy", otherwise its energyType), falling back to colorless. We deliberately
+ * no longer mix in the per-card special-energy artwork, which read as a jumble of
+ * mismatched styles next to the clean type symbols. (The exact special-energy
+ * identity is still available by inspecting the Pokemon.)
+ */
 export function energyIconSrc(card: { name?: string; fullName?: string; energyType?: string }): string {
   const name = card.name || card.fullName || '';
-  if (customEnergyIcons[name]) {
-    return customEnergyIcons[name];
-  }
   const basic = basicEnergyIcons.find(([pattern]) => pattern.test(name));
   const type = basic?.[1] ?? normalizedTypeName(card.energyType);
   return type ? `/assets/energy-icons/${type}.webp` : '/assets/energy-icons/colorless.webp';
