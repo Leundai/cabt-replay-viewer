@@ -13,12 +13,22 @@ import type { TransitionConfig } from 'svelte/transition';
  * a transform (e.g. the damage counter's translate(-50%, -50%)).
  */
 
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
+/** Strong custom easing curves shared by CSS transitions, Svelte transitions,
+ *  and the WAAPI cinematics. Built-in CSS easings are too weak (Emil's rule),
+ *  so these mirror the `--ease-*` custom properties in tokens.css. */
+export const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+export const EASE_IN_OUT = 'cubic-bezier(0.77, 0, 0.175, 1)';
+
+// Cache the MediaQueryList (its `.matches` stays live) so we don't re-parse the
+// query string on every call — prefersReducedMotion runs on the playback path.
+let reducedMotionQuery: MediaQueryList | null | undefined;
+
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  reducedMotionQuery ??= window.matchMedia('(prefers-reduced-motion: reduce)');
+  return reducedMotionQuery.matches;
 }
 
 type CardSwapOptions = { duration?: number; baseScale?: number; lift?: number };

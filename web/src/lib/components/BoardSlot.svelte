@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import CardTile from './CardTile.svelte';
   import { energyIconSrc, pokemonTypeIconSrc, pokemonTypeLabelFor } from '../game/energyIcons';
   import type { PokemonSlotView } from '../game/types';
-  import { cardSwap, pop } from '../motion';
+  import { cardSwap, pop, EASE_IN_OUT, EASE_OUT } from '../motion';
+  import { cardMotionStore, type AttackIntent } from '../../state/cardMotion.svelte';
 
   type Props = {
     slot: PokemonSlotView;
@@ -65,9 +67,165 @@
     event.preventDefault();
     onclick?.(event as unknown as MouseEvent);
   }
+
+  // --- Attack cinematic: a real-element lunge/recoil driven by the motion store.
+  // We animate the inner `.slot-card` (resting transform is `none`), never the
+  // wrapper (translateZ) or `.card-tile` (the top player's 180deg rotation), so
+  // WAAPI cancel always leaves the node clean.
+  let slotRoot = $state<HTMLDivElement>();
+  let slotKeyValue = $derived(`slot-${slot.ownerIndex}-${slot.slot}-${slot.index}`);
+  // Seed from the live batch so a remount doesn't replay an in-flight batch.
+  let appliedBatchId = cardMotionStore.batch?.batchId ?? 0;
+  let activeAnims: Animation[] = [];
+  let activeSpark: HTMLElement | null = null;
+  let pendingRaf = 0;
+
+  function clearAttackFx() {
+    if (pendingRaf) {
+      cancelAnimationFrame(pendingRaf);
+      pendingRaf = 0;
+    }
+    activeAnims.forEach((anim) => anim.cancel());
+    activeAnims = [];
+    activeSpark?.remove();
+    activeSpark = null;
+  }
+
+  function centerOf(el: Element) {
+    const rect = el.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, w: rect.width, h: rect.height };
+  }
+
+  function spawnImpact(defCenter: { x: number; y: number; w: number; h: number }, ux: number, uy: number, reduced: boolean) {
+    if (!slotRoot) {
+      return;
+    }
+    const slotRect = slotRoot.getBoundingClientRect();
+    // Bias the burst toward the attacker-facing edge of the defender card.
+    const contactX = defCenter.x - ux * defCenter.w * 0.3 - slotRect.left;
+    const contactY = defCenter.y - uy * defCenter.h * 0.3 - slotRect.top;
+    const spark = document.createElement('div');
+    spark.className = 'fx-impact';
+    spark.style.left = `${contactX.toFixed(1)}px`;
+    spark.style.top = `${contactY.toFixed(1)}px`;
+    slotRoot.appendChild(spark);
+    activeSpark = spark;
+    const fromScale = reduced ? 1 : 0.9;
+    const toScale = reduced ? 1 : 1.3;
+    const anim = spark.animate(
+      [
+        { transform: `translate(-50%, -50%) scale(${fromScale})`, opacity: 0 },
+        { opacity: 0.92, offset: 0.3 },
+        { transform: `translate(-50%, -50%) scale(${toScale})`, opacity: 0 },
+      ],
+      { duration: 240, easing: EASE_OUT },
+    );
+    anim.onfinish = () => {
+      spark.remove();
+      if (activeSpark === spark) {
+        activeSpark = null;
+      }
+    };
+    activeAnims.push(anim);
+  }
+
+  function runAttack(atk: AttackIntent, isAttacker: boolean, skipDefenderMove: boolean, budgetMs: number, reduced: boolean) {
+    const atkEl = document.querySelector<HTMLElement>(`[data-testid="${atk.attackerKey}"] .slot-card`);
+    const defEl = document.querySelector<HTMLElement>(`[data-testid="${atk.defenderKey}"] .slot-card`);
+    if (!atkEl || !defEl) {
+      return;
+    }
+    const isDefender = !isAttacker;
+    const a = centerOf(atkEl);
+    const d = centerOf(defEl);
+    const len = Math.hypot(d.x - a.x, d.y - a.y) || 1;
+    const ux = (d.x - a.x) / len;
+    const uy = (d.y - a.y) / len;
+    const mag = Math.min(64, Math.max(28, len * 0.22));
+    const dx = ux * mag;
+    const dy = uy * mag;
+
+    if (isDefender) {
+      spawnImpact(d, ux, uy, reduced);
+    }
+
+    if (reduced) {
+      if (isAttacker || !skipDefenderMove) {
+        const el = isAttacker ? atkEl : defEl;
+        activeAnims.push(el.animate([{ opacity: 1 }, { opacity: 0.72, offset: 0.4 }, { opacity: 1 }], { duration: 180, easing: EASE_OUT }));
+      }
+      return;
+    }
+
+    if (isAttacker) {
+      const duration = Math.min(300, Math.round(budgetMs * 0.55));
+      activeAnims.push(
+        atkEl.animate(
+          [
+            { transform: 'translate(0px, 0px) scale(1)', offset: 0 },
+            { transform: `translate(${(-dx * 0.16).toFixed(2)}px, ${(-dy * 0.16).toFixed(2)}px) scale(1)`, offset: 0.2 },
+            { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(1.05)`, offset: 0.46 },
+            { transform: 'translate(0px, 0px) scale(1)', offset: 1 },
+          ],
+          { duration, easing: EASE_IN_OUT },
+        ),
+      );
+    }
+
+    if (isDefender && !skipDefenderMove) {
+      const duration = Math.min(260, Math.round(budgetMs * 0.5));
+      const delay = Math.min(160, Math.round(budgetMs * 0.55 * 0.46));
+      activeAnims.push(
+        defEl.animate(
+          [
+            { transform: 'translate(0px, 0px) scale(1)', filter: 'blur(0px)', offset: 0 },
+            { transform: `translate(${(dx * 0.16).toFixed(2)}px, ${(dy * 0.16).toFixed(2)}px) scale(0.97)`, filter: 'blur(1.4px)', offset: 0.3 },
+            { transform: `translate(${(dx * 0.05).toFixed(2)}px, ${(dy * 0.05).toFixed(2)}px) scale(1)`, filter: 'blur(0px)', offset: 0.6 },
+            { transform: 'translate(0px, 0px) scale(1)', filter: 'blur(0px)', offset: 1 },
+          ],
+          { duration, delay, easing: EASE_OUT, fill: 'backwards' },
+        ),
+      );
+    }
+  }
+
+  $effect(() => {
+    const batch = cardMotionStore.batch;
+    const id = batch?.batchId ?? 0;
+    if (id === appliedBatchId) {
+      return;
+    }
+    appliedBatchId = id;
+    clearAttackFx(); // a new batch (or a clear) interrupts any in-flight lunge
+    const atk = batch?.attack;
+    if (!atk) {
+      return;
+    }
+    const isAttacker = slotKeyValue === atk.attackerKey;
+    const isDefender = slotKeyValue === atk.defenderKey;
+    if (!isAttacker && !isDefender) {
+      return;
+    }
+    if (isAttacker && atk.attackerReplaced) {
+      return; // the lunge target just remounted; let cardSwap own it
+    }
+    const skipDefenderMove = isDefender && atk.defenderReplaced;
+    const budgetMs = batch.budgetMs;
+    const reduced = batch.reduced;
+    // One rAF so we read rects after the post-step layout has settled. Keep the
+    // handle so a superseding batch's clearAttackFx() can cancel it before it
+    // fires (otherwise two rAFs would run runAttack on the same card).
+    pendingRaf = requestAnimationFrame(() => {
+      pendingRaf = 0;
+      runAttack(atk, isAttacker, skipDefenderMove, budgetMs, reduced);
+    });
+  });
+
+  onDestroy(clearAttackFx);
 </script>
 
 <div
+  bind:this={slotRoot}
   role="button"
   tabindex="0"
   class:active
@@ -185,6 +343,28 @@
     position: absolute;
     inset: 0;
     transform-origin: center;
+  }
+
+  /* Attack impact burst — appended imperatively to the defender slot, centred on
+     the contact point. Screen blend lets it read as light over the card art. */
+  .board-slot :global(.fx-impact) {
+    position: absolute;
+    z-index: 9;
+    width: clamp(36px, calc(var(--slot-card-w) * 0.62), 96px);
+    height: clamp(36px, calc(var(--slot-card-w) * 0.62), 96px);
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 236, 155, 0.85) 26%,
+      rgba(255, 176, 61, 0.5) 48%,
+      rgba(255, 140, 40, 0) 72%
+    );
+    mix-blend-mode: screen;
+    transform: translate(-50%, -50%) scale(0.9);
+    opacity: 0;
+    pointer-events: none;
+    will-change: transform, opacity;
   }
 
   .board-slot > .slot-card > :global(.card-tile),

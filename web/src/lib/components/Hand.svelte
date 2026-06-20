@@ -52,6 +52,7 @@
   class:can-scroll-left={canScrollLeft}
   class:can-scroll-right={canScrollRight}
   class="hand"
+  data-testid={`hand-${player.index}`}
   data-card-count={player.hand.length}
   onscroll={updateScrollIndicators}
 >

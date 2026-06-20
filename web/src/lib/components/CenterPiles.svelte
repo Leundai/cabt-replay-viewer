@@ -74,7 +74,7 @@
     </div>
     <div class="right-field">
       <div class="right-piles">
-        <span class="stack-pile deck-pile" style={deckPileStyle(topPlayer.deckCount, -1)} title={`${topPlayer.name} deck`}>
+        <span class="stack-pile deck-pile" data-testid={`deck-pile-${topPlayer.index}`} style={deckPileStyle(topPlayer.deckCount, -1)} title={`${topPlayer.name} deck`}>
           {#each visibleDeckLayers(topPlayer.deckCount) as layer, layerIndex}
             <span class="deck-card-layer" style={`--deck-layer: ${layerIndex};`}></span>
           {/each}
@@ -87,6 +87,7 @@
           type="button"
           class="stack-pile discard-pile"
           class:projected-hover={projectedHoverPile === 'top-discard'}
+          data-testid={`discard-pile-${topPlayer.index}`}
           title={`${topPlayer.name} discard`}
           bind:this={topDiscardPileElement}
           onclick={() => showDiscard(topPlayer)}
@@ -123,7 +124,7 @@
     </div>
     <div class="right-field">
       <div class="right-piles">
-        <span class="stack-pile deck-pile" style={deckPileStyle(bottomPlayer.deckCount, 1)} title={`${bottomPlayer.name} deck`}>
+        <span class="stack-pile deck-pile" data-testid={`deck-pile-${bottomPlayer.index}`} style={deckPileStyle(bottomPlayer.deckCount, 1)} title={`${bottomPlayer.name} deck`}>
           {#each visibleDeckLayers(bottomPlayer.deckCount) as layer, layerIndex}
             <span class="deck-card-layer" style={`--deck-layer: ${layerIndex};`}></span>
           {/each}
@@ -136,6 +137,7 @@
           type="button"
           class="stack-pile discard-pile"
           class:projected-hover={projectedHoverPile === 'bottom-discard'}
+          data-testid={`discard-pile-${bottomPlayer.index}`}
           title={`${bottomPlayer.name} discard`}
           bind:this={bottomDiscardPileElement}
           onclick={() => showDiscard(bottomPlayer)}

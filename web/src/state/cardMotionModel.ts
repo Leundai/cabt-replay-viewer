@@ -1,0 +1,264 @@
+import type { CardView, GameView, PlayerView } from '../lib/game/types';
+import { REPLAY_PLAYBACK_SPEEDS, type ReplayPlaybackSpeedId } from './replayPlaybackModel';
+
+/**
+ * Pure card-motion model. Turns the replay's append-only log stream into
+ * transient, TCG-flavoured motion intents (attack lunge, deck draw,
+ * play-to-centre reveal) and decides when a cinematic is allowed to play.
+ *
+ * Kept DOM-free and rune-free (mirrors the replayPlaybackModel / replay.svelte
+ * split) so it is unit-testable in a plain node environment. The reactive store
+ * in cardMotion.svelte.ts is a thin wrapper around these functions.
+ *
+ * Design notes (verified against real CABT replays):
+ *  - The log delta for entering a step is `nextView.logs.slice(prevView.logs.length)`.
+ *    `logs` is append-only and cumulative, so the slice is robust. We deliberately
+ *    do NOT key off the raw `serial` field — it is a per-card instance id, not a
+ *    monotonic event counter (it repeats and jumps around).
+ *  - Cinematics only ever fire on a single forward transition (dir === 1) at a
+ *    calm cadence. Backward steps, multi-step jumps (scrubbing the timeline by
+ *    more than one notch / first/last), rapid mashing and turbo autoplay are
+ *    suppressed. A deliberate one-notch forward nudge animates like a step —
+ *    that is intentional and harmless (the board is a pure function anyway).
+ *  - Intents carry selector STRINGS (encoding the stable ownerIndex), never DOM
+ *    nodes, so consumers resolve live rects at play time and it survives switch-sides.
+ */
+
+export type RawLog = {
+  type?: string;
+  playerIndex?: number;
+  cardId?: number;
+  attackId?: number;
+  serial?: number;
+  fromArea?: number;
+  toArea?: number;
+  value?: number;
+};
+
+export type AttackIntent = {
+  attackerKey: string;
+  defenderKey: string;
+  attackerOwner: number;
+  defenderOwner: number;
+  /** True when the slot's Pokemon changed this step (KO + replacement); the
+   *  consumer skips the in-place move and lets the cardSwap transition own it. */
+  attackerReplaced: boolean;
+  defenderReplaced: boolean;
+};
+
+export type DrawIntent = {
+  id: string;
+  kind: 'draw';
+  ownerIndex: number;
+  count: number;
+};
+
+export type PlayIntent = {
+  id: string;
+  kind: 'play';
+  ownerIndex: number;
+  cardId: number;
+  card: CardView | null;
+  destSelector: string | null;
+};
+
+export type TravelIntent = DrawIntent | PlayIntent;
+
+export type MotionIntents = {
+  attack: AttackIntent | null;
+  travels: TravelIntent[];
+};
+
+export type MotionEligibility = {
+  attack: boolean;
+  draw: boolean;
+  reveal: boolean;
+  budgetMs: number;
+};
+
+const RAPID_STEP_MS = 220;
+const DEFAULT_INTERVAL_MS = 800;
+const MANUAL_BUDGET_MS = 1300;
+
+function slotKey(owner: number, kind: 'active' | 'bench', index: number): string {
+  return `slot-${owner}-${kind}-${index}`;
+}
+
+function intervalFor(speedId: ReplayPlaybackSpeedId): number {
+  return REPLAY_PLAYBACK_SPEEDS.find((speed) => speed.id === speedId)?.intervalMs ?? DEFAULT_INTERVAL_MS;
+}
+
+/** Read a LogView's raw params as a typed CABT log entry. */
+export function rawLog(entry: { params?: unknown }): RawLog {
+  return (entry?.params ?? {}) as RawLog;
+}
+
+/** New log entries for the transition prevView -> nextView. Append-only, so a
+ *  plain length-based slice is correct and far more robust than serial diffing. */
+export function logDelta(prevView: GameView | null, nextView: GameView | null): RawLog[] {
+  if (!nextView) {
+    return [];
+  }
+  const start = prevView?.logs.length ?? 0;
+  return nextView.logs.slice(start).map(rawLog);
+}
+
+function pokemonName(view: GameView | null, owner: number): string | undefined {
+  return view?.players[owner]?.active?.pokemon?.fullName;
+}
+
+/** Find the played card's CardView anywhere in a player's view by id, so the
+ *  reveal always shows the RIGHT art even when it lands in a zone we don't
+ *  anchor to. (CardView.id is a species id, so this is the right artwork; the
+ *  exact instance is irrelevant for a cinematic.) */
+function findCardById(player: PlayerView, cardId: number): CardView | null {
+  const flat: CardView[] = [
+    ...player.hand,
+    ...player.discard,
+    ...player.lostZone,
+    ...player.stadium,
+  ];
+  for (const slot of [player.active, ...player.bench]) {
+    if (slot?.pokemon) flat.push(slot.pokemon);
+    flat.push(...(slot?.energy ?? []), ...(slot?.tools ?? []));
+  }
+  return flat.find((card) => card.id === cardId) ?? null;
+}
+
+function resolvePlayDestination(
+  nextView: GameView,
+  owner: number,
+  cardId: number,
+): { selector: string | null; card: CardView | null } {
+  const player = nextView.players[owner];
+  if (!player) {
+    return { selector: null, card: null };
+  }
+  if (player.active?.pokemon?.id === cardId) {
+    return { selector: slotKey(owner, 'active', 0), card: player.active.pokemon ?? null };
+  }
+  const benchIndex = player.bench.findIndex((slot) => slot.pokemon?.id === cardId);
+  if (benchIndex >= 0) {
+    return { selector: slotKey(owner, 'bench', benchIndex), card: player.bench[benchIndex].pokemon ?? null };
+  }
+  // Trainers / items resolve to the discard pile after they take effect — but
+  // ONLY when the card actually matches; never fall back to an unrelated card.
+  const discardCard = player.discard.find((card) => card.id === cardId);
+  if (discardCard) {
+    return { selector: `discard-pile-${owner}`, card: discardCard };
+  }
+  // Otherwise surface the played card's art (found in any zone) at centre and
+  // fade — or, if it can't be located, show nothing rather than a wrong card.
+  return { selector: null, card: findCardById(player, cardId) };
+}
+
+/**
+ * Pure intent derivation from a log delta. `prevView` is used only to detect
+ * KO+replacement so the attack consumer can defer to the cardSwap transition
+ * instead of fighting it.
+ */
+export function deriveMotionIntents(
+  prevView: GameView | null,
+  nextView: GameView | null,
+  delta: RawLog[],
+): MotionIntents {
+  if (!nextView) {
+    return { attack: null, travels: [] };
+  }
+
+  let attack: AttackIntent | null = null;
+  // Map keeps first-insertion order, so it doubles as the draw ordering.
+  const draws = new Map<number, { count: number; firstIndex: number }>();
+  const plays: TravelIntent[] = [];
+
+  delta.forEach((log, index) => {
+    if (log.type === 'Attack' && typeof log.playerIndex === 'number') {
+      const attacker = log.playerIndex;
+      const defender = attacker === 0 ? 1 : 0;
+      const attackerSlot = nextView.players[attacker]?.active;
+      const defenderSlot = nextView.players[defender]?.active;
+      if (attackerSlot && !attackerSlot.empty && defenderSlot && !defenderSlot.empty) {
+        // Keep the first attack of a delta; CABT only resolves one per step.
+        attack ??= {
+          attackerKey: slotKey(attacker, 'active', 0),
+          defenderKey: slotKey(defender, 'active', 0),
+          attackerOwner: attacker,
+          defenderOwner: defender,
+          attackerReplaced: pokemonName(prevView, attacker) !== pokemonName(nextView, attacker),
+          defenderReplaced: pokemonName(prevView, defender) !== pokemonName(nextView, defender),
+        };
+      }
+      return;
+    }
+    if (log.type === 'Draw' && typeof log.playerIndex === 'number') {
+      const existing = draws.get(log.playerIndex);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        draws.set(log.playerIndex, { count: 1, firstIndex: index });
+      }
+      return;
+    }
+    if (log.type === 'Play' && typeof log.playerIndex === 'number' && typeof log.cardId === 'number') {
+      const { selector, card } = resolvePlayDestination(nextView, log.playerIndex, log.cardId);
+      plays.push({
+        id: `play-${log.playerIndex}-${log.cardId}-${index}`,
+        kind: 'play',
+        ownerIndex: log.playerIndex,
+        cardId: log.cardId,
+        card,
+        destSelector: selector,
+      });
+    }
+  });
+
+  // Draws lead the batch (in first-seen order) so the "pull from deck" reads
+  // before any reveal.
+  const drawTravels: TravelIntent[] = [...draws.entries()].map(([owner, entry]) => ({
+    id: `draw-${owner}-${entry.firstIndex}`,
+    kind: 'draw',
+    ownerIndex: owner,
+    count: entry.count,
+  }));
+
+  return { attack, travels: [...drawTravels, ...plays] };
+}
+
+/**
+ * Pure gating. Returns which effect kinds are eligible and the per-batch time
+ * budget, or null to suppress everything. `dt` is ms since the previous step.
+ */
+export function planEligibility(args: {
+  dir: number;
+  prevViewKnown: boolean;
+  speedId: ReplayPlaybackSpeedId;
+  playing: boolean;
+  dt: number;
+  hidden: boolean;
+}): MotionEligibility | null {
+  const { dir, prevViewKnown, speedId, playing, dt, hidden } = args;
+  if (hidden) {
+    return null;
+  }
+  // Only a single forward transition earns a cinematic. dir > 1 (multi-step
+  // scrub / first/last) and dir <= 0 (backward / same) are suppressed.
+  if (dir !== 1 || !prevViewKnown) {
+    return null;
+  }
+  // Turbo autoplay: the board just flies; suppress everything.
+  if (playing && speedId === 'turbo') {
+    return null;
+  }
+  const interval = playing ? intervalFor(speedId) : MANUAL_BUDGET_MS;
+  const budgetMs = playing ? Math.max(160, interval - 80) : MANUAL_BUDGET_MS;
+  // Mashing the step key (paused) outruns any cadence — clip to attack only.
+  if (dt < RAPID_STEP_MS) {
+    return { attack: true, draw: false, reveal: false, budgetMs: Math.min(budgetMs, 240) };
+  }
+  // Fast autoplay (400ms): only the short in-place attack fits.
+  if (playing && speedId === 'fast') {
+    return { attack: true, draw: false, reveal: false, budgetMs: Math.min(budgetMs, 300) };
+  }
+  // Normal / slow autoplay, or any calm manual step: the full repertoire.
+  return { attack: true, draw: true, reveal: true, budgetMs };
+}

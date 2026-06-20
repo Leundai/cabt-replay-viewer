@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import BoardLayer from './lib/components/BoardLayer.svelte';
   import BoardPerspectiveControls from './lib/components/BoardPerspectiveControls.svelte';
   import CardInspector from './lib/components/CardInspector.svelte';
@@ -7,13 +7,17 @@
   import GameStatus from './lib/components/GameStatus.svelte';
   import Hand from './lib/components/Hand.svelte';
   import LogPanel from './lib/components/LogPanel.svelte';
+  import MotionOverlay from './lib/components/MotionOverlay.svelte';
   import PlayerPanel from './lib/components/PlayerPanel.svelte';
   import ReplaySidebar from './lib/components/ReplaySidebar.svelte';
   import ReplayTimeline from './lib/components/ReplayTimeline.svelte';
   import TableShell from './lib/components/TableShell.svelte';
   import ZoneViewer from './lib/components/ZoneViewer.svelte';
   import type { ZoneName } from './state/zoneViewer.svelte';
+  import type { GameView } from './lib/game/types';
+  import type { ReplaySnapshot } from './lib/game/replay';
   import { cardInspectorStore } from './state/cardInspector.svelte';
+  import { cardMotionStore } from './state/cardMotion.svelte';
   import { replayStore } from './state/replay.svelte';
   import { viewSettingsStore } from './state/viewSettings.svelte';
   import { zoneViewerStore } from './state/zoneViewer.svelte';
@@ -41,6 +45,46 @@
     document.documentElement.dataset.theme = viewSettingsStore.theme;
     document.documentElement.dataset.themePreference = viewSettingsStore.themePreference;
     document.documentElement.style.colorScheme = viewSettingsStore.theme;
+  });
+
+  // Drive the card-motion cinematics. We track only step + view + replay
+  // identity; speed/playing are read untracked so changing speed never
+  // re-fires a step. The store gates everything (direction, cadence, reduced
+  // motion), so this stays a pure downstream side-effect of the snapshot.
+  let lastView: GameView | null = null;
+  let lastIndex = 0;
+  let lastReplay: ReplaySnapshot | null = null;
+  let wasPlaying = false;
+
+  $effect(() => {
+    const nextReplay = replayStore.replay;
+    const nextIndex = replayStore.stepIndex;
+    const nextView = replayStore.currentView;
+    untrack(() => {
+      if (nextReplay !== lastReplay) {
+        lastReplay = nextReplay;
+        lastView = null;
+        lastIndex = 0;
+        wasPlaying = false;
+        cardMotionStore.clearAll();
+      }
+      const playing = replayStore.playing;
+      cardMotionStore.onStep({
+        prevView: lastView,
+        nextView,
+        prevIndex: lastIndex,
+        nextIndex,
+        speedId: replayStore.playbackSpeedId,
+        // The final autoplay tick flips playing=false in the same synchronous
+        // tick it advances the step, so treat a step as autoplay-driven when
+        // play was active on the previous step too — keeps the last step gated
+        // to its speed tier instead of unleashing the full manual cinematic.
+        playing: playing || wasPlaying,
+      });
+      lastView = nextView;
+      lastIndex = nextIndex;
+      wasPlaying = playing;
+    });
   });
 
   async function loadInitialReplay() {
@@ -81,6 +125,7 @@
     replayStore.clear();
     cardInspectorStore.close();
     zoneViewerStore.close();
+    cardMotionStore.clearAll();
   }
 
 </script>
@@ -198,6 +243,8 @@
             actionDisabled
             close={() => zoneViewerStore.close()}
           />
+
+          <MotionOverlay />
         </BoardLayer>
         <CardInspector />
       </TableShell>
