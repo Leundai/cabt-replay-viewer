@@ -63,7 +63,13 @@ Open `http://127.0.0.1:5173`.
 Kaggle access is handled only by the backend. Do not put Kaggle credentials in
 browser code.
 
-For local or Railway use, set:
+For local or Railway use, set a server-side Kaggle API token:
+
+```bash
+KAGGLE_API_TOKEN=your-kaggle-api-token
+```
+
+Legacy Kaggle API credentials are also supported:
 
 ```bash
 KAGGLE_USERNAME=your-kaggle-username

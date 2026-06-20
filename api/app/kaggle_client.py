@@ -17,7 +17,7 @@ class KaggleClient:
     def status_message(self) -> str:
         if self.credentials.configured:
             return "Kaggle credentials are configured server-side."
-        return "Kaggle credentials are not configured. JSON upload still works; set KAGGLE_USERNAME and KAGGLE_KEY on the server to import Kaggle episodes."
+        return "Kaggle credentials are not configured. JSON upload still works; set KAGGLE_API_TOKEN or KAGGLE_USERNAME/KAGGLE_KEY on the server to import Kaggle episodes."
 
     async def list_submissions(self, competition: str, page: int = 1, page_size: int = 25) -> list[KaggleSubmission]:
         data = await self._get(

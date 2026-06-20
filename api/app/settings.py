@@ -47,6 +47,7 @@ def load_kaggle_credentials() -> KaggleCredentials:
     bearer = (
         os.getenv("KAGGLE_BEARER_TOKEN")
         or os.getenv("KAGGLE_ACCESS_TOKEN")
+        or os.getenv("KAGGLE_API_TOKEN")
         or read_local_access_token()
     )
     if bearer:
