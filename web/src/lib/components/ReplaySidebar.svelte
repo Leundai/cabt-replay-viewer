@@ -270,7 +270,51 @@
       entry.teamName,
       entry.score,
       entry.submissionDate,
+      ...(entry.submissions ?? []).flatMap((submission) => [
+        submission.id,
+        submission.teamId,
+        submission.teamName,
+        submission.submittedBy,
+        submission.description,
+        submission.status,
+        submission.score,
+        submission.date,
+        ...(submission.episodes ?? []).flatMap((episode) => [
+          episode.id,
+          episode.submissionId,
+          episode.competitionName,
+          episode.reward,
+          episode.status,
+          episode.date,
+        ]),
+      ]),
     ].some((value) => String(value ?? '').toLowerCase().includes(normalized)));
+  }
+
+  function entryReplayCount(entry: KaggleLeaderboardEntry): number {
+    return (entry.submissions ?? []).reduce(
+      (total, submission) => total + (submission.episodes?.length ?? 0),
+      0,
+    );
+  }
+
+  function formatEntryRuns(entry: KaggleLeaderboardEntry): string {
+    const submissionCount = entry.submissions?.length ?? 0;
+    const replayCount = entryReplayCount(entry);
+    if (!submissionCount && !replayCount) {
+      return '';
+    }
+    const submissionLabel = submissionCount === 1 ? 'submission' : 'submissions';
+    const replayLabel = replayCount === 1 ? 'replay' : 'replays';
+    return `${submissionCount} ${submissionLabel} - ${replayCount} ${replayLabel}`;
+  }
+
+  function formatSubmissionMeta(submission: KaggleSubmission): string {
+    return [
+      submission.score !== undefined && submission.score !== null ? `Score ${submission.score}` : '',
+      formatDate(submission.date),
+      submission.status,
+    ].filter(Boolean).join(' - ');
   }
 
   function formatDate(value: string | undefined | null): string {
@@ -369,12 +413,50 @@
       <div class="leaderboard-list">
         {#each filteredLeaderboard as entry}
           <article class="leaderboard-row">
-            <span class="leaderboard-rank">{entry.rank}</span>
-            <span class="leaderboard-team">
-              <strong>{entry.teamName}</strong>
-              <small>{formatDate(entry.submissionDate) || (entry.teamId ? `Team ${entry.teamId}` : 'Team')}</small>
-            </span>
-            <strong class="leaderboard-score">{entry.score ?? 'No score'}</strong>
+            <div class="leaderboard-main">
+              <span class="leaderboard-rank">{entry.rank}</span>
+              <span class="leaderboard-team">
+                <strong>{entry.teamName}</strong>
+                <small>
+                  {formatDate(entry.submissionDate) || (entry.teamId ? `Team ${entry.teamId}` : 'Team')}
+                  {#if formatEntryRuns(entry)}
+                    - {formatEntryRuns(entry)}
+                  {/if}
+                </small>
+              </span>
+              <strong class="leaderboard-score">{entry.score ?? 'No score'}</strong>
+            </div>
+            {#if entry.submissions?.length}
+              <div class="leaderboard-submissions">
+                {#each entry.submissions as submission}
+                  <div class="leaderboard-submission">
+                    <span class="submission-summary">
+                      <strong>Submission #{submission.id}</strong>
+                      <small>{formatSubmissionMeta(submission)}</small>
+                    </span>
+                    {#if submission.episodes?.length}
+                      <div class="leaderboard-episodes">
+                        {#each submission.episodes as episode}
+                          {#if adminUnlocked}
+                            <button
+                              type="button"
+                              class="episode-pill"
+                              onclick={() => openKaggleEpisode(episode.id)}
+                            >
+                              Replay {episode.id}
+                            </button>
+                          {:else}
+                            <span class="episode-pill locked" title="Admin token required">
+                              Replay {episode.id}
+                            </span>
+                          {/if}
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </article>
         {/each}
       </div>
@@ -547,7 +629,7 @@
   .replay-open,
   .submission-list button,
   .episode-list button,
-  .leaderboard-row {
+  .leaderboard-main {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -556,7 +638,8 @@
 
   .replay-sidebar header div,
   .drop-target div,
-  .replay-list span {
+  .replay-list span,
+  .submission-summary {
     min-width: 0;
     display: grid;
     gap: 4px;
@@ -672,6 +755,8 @@
   }
 
   .leaderboard-row {
+    display: grid;
+    gap: 8px;
     min-height: 54px;
     padding: 9px;
     border: 1px solid var(--surface-inset-border);
@@ -713,6 +798,54 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 13px;
+  }
+
+  .leaderboard-submissions {
+    display: grid;
+    gap: 6px;
+    padding-left: 44px;
+  }
+
+  .leaderboard-submission {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    padding-left: 9px;
+    border-left: 2px solid var(--surface-inset-border);
+  }
+
+  .submission-summary strong,
+  .submission-summary small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .leaderboard-episodes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .episode-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    max-width: 100%;
+    padding: 3px 7px;
+    border: 1px solid var(--button-border);
+    border-radius: 999px;
+    background: var(--button-bg);
+    color: var(--button-text);
+    font-size: 11px;
+    font-weight: 850;
+    line-height: 1.2;
+  }
+
+  .episode-pill.locked {
+    border-color: var(--surface-inset-border);
+    background: var(--surface-card-bg);
+    color: var(--text-secondary);
   }
 
   .replay-open,

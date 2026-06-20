@@ -15,7 +15,13 @@ from pydantic import ValidationError
 
 from .kaggle_client import KaggleClient
 from .leaderboard_cache import LeaderboardCache
-from .models import ImportReplayRequest, KaggleLeaderboardSnapshot, KaggleStatus
+from .models import (
+    ImportReplayRequest,
+    KaggleEpisode,
+    KaggleLeaderboardEntry,
+    KaggleLeaderboardSnapshot,
+    KaggleStatus,
+)
 from .replay_store import ReplayStore
 from .settings import load_settings
 
@@ -89,6 +95,58 @@ def require_replay_import_admin(x_cabt_admin_token: str = Header(default="")) ->
     require_admin(x_cabt_admin_token)
 
 
+async def enrich_leaderboard_entries(entries: list[KaggleLeaderboardEntry]) -> list[KaggleLeaderboardEntry]:
+    if settings.kaggle_leaderboard_team_submission_limit <= 0 or settings.kaggle_leaderboard_submissions_per_team <= 0:
+        return entries
+
+    enriched: list[KaggleLeaderboardEntry] = []
+    for index, entry in enumerate(entries):
+        if index >= settings.kaggle_leaderboard_team_submission_limit or entry.teamId is None:
+            enriched.append(entry)
+            continue
+        enriched.append(await enrich_leaderboard_entry(entry))
+    return enriched
+
+
+async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry) -> KaggleLeaderboardEntry:
+    if entry.teamId is None:
+        return entry
+    try:
+        submissions = await kaggle.list_team_submissions(entry.teamId, team_name=entry.teamName)
+    except HTTPException:
+        return entry
+    except Exception:
+        return entry
+
+    enriched_submissions = []
+    for submission in submissions[: settings.kaggle_leaderboard_submissions_per_team]:
+        updates: dict[str, object] = {}
+        if submission.teamId is None:
+            updates["teamId"] = entry.teamId
+        if not submission.teamName:
+            updates["teamName"] = entry.teamName
+
+        episodes = await safe_list_submission_episodes(submission.id)
+        if episodes:
+            updates["episodes"] = episodes
+
+        enriched_submissions.append(submission.model_copy(update=updates) if updates else submission)
+
+    return entry.model_copy(update={"submissions": enriched_submissions})
+
+
+async def safe_list_submission_episodes(submission_id: int) -> list[KaggleEpisode]:
+    if settings.kaggle_leaderboard_episodes_per_submission <= 0 or submission_id <= 0:
+        return []
+    try:
+        episodes = await kaggle.list_episodes(submission_id)
+    except HTTPException:
+        return []
+    except Exception:
+        return []
+    return episodes[: settings.kaggle_leaderboard_episodes_per_submission]
+
+
 async def get_leaderboard_snapshot(competition: str, *, refresh_if_stale: bool, force: bool = False) -> KaggleLeaderboardSnapshot:
     snapshot = leaderboard_cache.get(competition)
     should_refresh = force or (refresh_if_stale and snapshot.stale)
@@ -107,6 +165,7 @@ async def get_leaderboard_snapshot(competition: str, *, refresh_if_stale: bool, 
                 competition,
                 page_size=settings.kaggle_leaderboard_page_size,
             )
+            entries = await enrich_leaderboard_entries(entries)
         except HTTPException as error:
             detail = error.detail if isinstance(error.detail, str) else "Kaggle refresh failed."
             return stale_leaderboard_snapshot(snapshot, f"{detail} Showing cached leaderboard only.")

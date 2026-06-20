@@ -32,6 +32,9 @@ class Settings:
     kaggle_default_competition: str
     kaggle_leaderboard_cache_seconds: int
     kaggle_leaderboard_page_size: int
+    kaggle_leaderboard_team_submission_limit: int
+    kaggle_leaderboard_submissions_per_team: int
+    kaggle_leaderboard_episodes_per_submission: int
     admin_token: str
     allow_public_imports: bool
     max_replay_bytes: int
@@ -52,13 +55,25 @@ def load_settings() -> Settings:
         ),
         kaggle_credentials=load_kaggle_credentials(),
         kaggle_default_competition=os.getenv("KAGGLE_DEFAULT_COMPETITION", "pokemon-tcg-ai-battle"),
-        kaggle_leaderboard_cache_seconds=int(os.getenv("KAGGLE_LEADERBOARD_CACHE_SECONDS", "1800")),
-        kaggle_leaderboard_page_size=min(200, max(1, int(os.getenv("KAGGLE_LEADERBOARD_PAGE_SIZE", "50")))),
+        kaggle_leaderboard_cache_seconds=bounded_int_env("KAGGLE_LEADERBOARD_CACHE_SECONDS", 1800, minimum=60, maximum=86_400),
+        kaggle_leaderboard_page_size=bounded_int_env("KAGGLE_LEADERBOARD_PAGE_SIZE", 50, minimum=1, maximum=200),
+        kaggle_leaderboard_team_submission_limit=bounded_int_env("KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT", 12, minimum=0, maximum=100),
+        kaggle_leaderboard_submissions_per_team=bounded_int_env("KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM", 2, minimum=0, maximum=20),
+        kaggle_leaderboard_episodes_per_submission=bounded_int_env("KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION", 2, minimum=0, maximum=20),
         admin_token=os.getenv("CABT_ADMIN_TOKEN", ""),
         allow_public_imports=os.getenv("CABT_ALLOW_PUBLIC_IMPORTS", "").lower() in {"1", "true", "yes"},
         max_replay_bytes=int(os.getenv("CABT_MAX_REPLAY_BYTES", str(25 * 1024 * 1024))),
         max_stored_replays=int(os.getenv("CABT_MAX_STORED_REPLAYS", "500")),
     )
+
+
+def bounded_int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        parsed = int(raw)
+    except ValueError:
+        parsed = default
+    return min(maximum, max(minimum, parsed))
 
 
 def normalize_kaggle_base_url(

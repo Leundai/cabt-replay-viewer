@@ -9,11 +9,12 @@ from api.app.settings import KaggleCredentials, load_kaggle_credentials, normali
 
 
 def test_kaggle_normalizers_tolerate_non_numeric_ids():
-    submission = normalize_submission({"id": "not-a-number", "teamName": "Demo"})
+    submission = normalize_submission({"id": "not-a-number", "teamName": "Demo", "dateSubmitted": "2026-06-20T00:00:00Z"})
     episode = normalize_episode({"episodeId": "also-not-a-number", "agents": [{"submissionId": "bad"}]})
 
     assert submission.id == 0
     assert submission.teamName == "Demo"
+    assert submission.date == "2026-06-20T00:00:00Z"
     assert episode.id == 0
     assert episode.submissionId is None
 
@@ -61,6 +62,35 @@ async def test_kaggle_submission_list_response_shape_is_supported(monkeypatch):
 
     assert submissions[0].id == 123
     assert submissions[0].teamName == "Leundai"
+
+
+@pytest.mark.anyio
+async def test_kaggle_team_public_submissions_response_shape_is_supported(monkeypatch):
+    client = KaggleClient("https://example.com", KaggleCredentials(mode="bearer", bearer_token="token"), max_response_bytes=1024)
+
+    async def fake_post_rpc(method, payload):
+        assert method == "ListTeamPublicSubmissions"
+        assert payload == {"teamId": 16376775}
+        return {
+            "submissions": [
+                {
+                    "id": 111,
+                    "dateSubmitted": "2026-06-20T12:00:00Z",
+                    "publicScore": "1307.9",
+                    "status": "complete",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(client, "_post_rpc", fake_post_rpc)
+
+    submissions = await client.list_team_submissions(16376775, team_name="TrustHub hiroingk")
+
+    assert submissions[0].id == 111
+    assert submissions[0].teamId == 16376775
+    assert submissions[0].teamName == "TrustHub hiroingk"
+    assert submissions[0].score == "1307.9"
+    assert submissions[0].date == "2026-06-20T12:00:00Z"
 
 
 @pytest.mark.anyio
@@ -127,6 +157,25 @@ def test_leaderboard_normalizer_tolerates_missing_team_id():
     assert entry.rank == 7
     assert entry.teamId is None
     assert entry.teamName == "No Id"
+
+
+def test_episode_normalizer_prefers_matching_submission_agent():
+    episode = normalize_episode(
+        {
+            "episodeId": 9001,
+            "competitionName": "pokemon-tcg-ai-battle",
+            "agents": [
+                {"submissionId": 222, "reward": "0"},
+                {"submissionId": 111, "reward": "1"},
+            ],
+        },
+        fallback_submission_id=111,
+    )
+
+    assert episode.id == 9001
+    assert episode.submissionId == 111
+    assert episode.competitionName == "pokemon-tcg-ai-battle"
+    assert episode.reward == "1"
 
 
 def test_kaggle_base_url_rejects_non_kaggle_hosts(monkeypatch):

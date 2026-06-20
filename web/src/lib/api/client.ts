@@ -18,6 +18,16 @@ export type KaggleStatus = {
   message: string;
 };
 
+export type KaggleEpisode = {
+  id: number;
+  submissionId?: number;
+  competitionName?: string;
+  replayUrl?: string;
+  reward?: number | string;
+  status?: string;
+  date?: string;
+};
+
 export type KaggleSubmission = {
   id: number;
   teamId?: number;
@@ -27,6 +37,7 @@ export type KaggleSubmission = {
   score?: number | string;
   status?: string;
   date?: string;
+  episodes?: KaggleEpisode[];
 };
 
 export type KaggleLeaderboardEntry = {
@@ -35,6 +46,7 @@ export type KaggleLeaderboardEntry = {
   teamName: string;
   score?: number | string;
   submissionDate?: string;
+  submissions?: KaggleSubmission[];
 };
 
 export type KaggleLeaderboardSnapshot = {
@@ -48,16 +60,6 @@ export type KaggleLeaderboardSnapshot = {
   nextPageToken?: string;
   source: string;
   message: string;
-};
-
-export type KaggleEpisode = {
-  id: number;
-  submissionId?: number;
-  competitionName?: string;
-  replayUrl?: string;
-  reward?: number | string;
-  status?: string;
-  date?: string;
 };
 
 export type ImportReplayResponse = {

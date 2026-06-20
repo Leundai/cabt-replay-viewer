@@ -30,12 +30,34 @@ class KaggleStatus(BaseModel):
     message: str
 
 
+class KaggleEpisode(BaseModel):
+    id: int
+    submissionId: int | None = None
+    competitionName: str | None = None
+    reward: str | float | None = None
+    status: str | None = None
+    date: str | None = None
+
+
+class KaggleSubmission(BaseModel):
+    id: int
+    teamId: int | None = None
+    teamName: str | None = None
+    submittedBy: str | None = None
+    description: str | None = None
+    score: str | float | None = None
+    status: str | None = None
+    date: str | None = None
+    episodes: list[KaggleEpisode] = Field(default_factory=list)
+
+
 class KaggleLeaderboardEntry(BaseModel):
     rank: int
     teamId: int | None = None
     teamName: str
     score: str | float | None = None
     submissionDate: str | None = None
+    submissions: list[KaggleSubmission] = Field(default_factory=list)
 
 
 class KaggleLeaderboardSnapshot(BaseModel):
@@ -49,23 +71,3 @@ class KaggleLeaderboardSnapshot(BaseModel):
     nextPageToken: str | None = None
     source: str = "empty"
     message: str = ""
-
-
-class KaggleSubmission(BaseModel):
-    id: int
-    teamId: int | None = None
-    teamName: str | None = None
-    submittedBy: str | None = None
-    description: str | None = None
-    score: str | float | None = None
-    status: str | None = None
-    date: str | None = None
-
-
-class KaggleEpisode(BaseModel):
-    id: int
-    submissionId: int | None = None
-    competitionName: str | None = None
-    reward: str | float | None = None
-    status: str | None = None
-    date: str | None = None

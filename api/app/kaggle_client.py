@@ -27,12 +27,21 @@ class KaggleClient:
             "ListSubmissions",
             {"competitionName": competition, "page": page, "pageSize": page_size},
         )
-        raw_items = data if isinstance(data, list) else data.get("submissions", [])
+        raw_items = list_items(data, "submissions")
         return [normalize_submission(item) for item in raw_items if isinstance(item, dict)]
+
+    async def list_team_submissions(self, team_id: int, team_name: str | None = None) -> list[KaggleSubmission]:
+        data = await self._post_rpc("ListTeamPublicSubmissions", {"teamId": team_id})
+        raw_items = list_items(data, "submissions")
+        return [
+            normalize_submission(item, fallback_team_id=team_id, fallback_team_name=team_name)
+            for item in raw_items
+            if isinstance(item, dict)
+        ]
 
     async def list_episodes(self, submission_id: int) -> list[KaggleEpisode]:
         data = await self._post_rpc("ListSubmissionEpisodes", {"submissionId": submission_id})
-        raw_items = data if isinstance(data, list) else data.get("episodes", [])
+        raw_items = list_items(data, "episodes")
         return [normalize_episode(item, submission_id) for item in raw_items if isinstance(item, dict)]
 
     async def list_leaderboard(self, competition: str, page_size: int = 50) -> tuple[list[KaggleLeaderboardEntry], str | None]:
@@ -40,7 +49,7 @@ class KaggleClient:
             "GetLeaderboard",
             {"competitionName": competition, "overridePublic": True, "pageSize": page_size},
         )
-        raw_items = data if isinstance(data, list) else data.get("submissions", [])
+        raw_items = list_items(data, "submissions")
         entries = [
             normalize_leaderboard_entry(item, rank)
             for rank, item in enumerate(raw_items, start=1)
@@ -127,17 +136,30 @@ class KaggleClient:
         return b"".join(chunks)
 
 
-def normalize_submission(item: dict[str, Any]) -> KaggleSubmission:
+def normalize_submission(
+    item: dict[str, Any],
+    fallback_team_id: int | None = None,
+    fallback_team_name: str | None = None,
+) -> KaggleSubmission:
     return KaggleSubmission(
         id=parse_int(value(item, "ref", "id", "submissionId")),
-        teamId=parse_optional_int(value(item, "teamId", "team_id")),
-        teamName=value(item, "teamName", "team_name"),
+        teamId=parse_optional_int(value(item, "teamId", "team_id")) or fallback_team_id,
+        teamName=value(item, "teamName", "team_name") or fallback_team_name,
         submittedBy=value(item, "submittedBy", "submitted_by"),
         description=value(item, "description"),
         score=value(item, "publicScore", "privateScore", "score"),
         status=value(item, "status"),
-        date=value(item, "date"),
+        date=value(item, "dateSubmitted", "submittedDate", "submissionDate", "date"),
     )
+
+
+def list_items(data: Any, key: str) -> list[Any]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        items = data.get(key, [])
+        return items if isinstance(items, list) else []
+    return []
 
 
 def normalize_leaderboard_entry(item: dict[str, Any], rank: int) -> KaggleLeaderboardEntry:
@@ -152,10 +174,22 @@ def normalize_leaderboard_entry(item: dict[str, Any], rank: int) -> KaggleLeader
 
 def normalize_episode(item: dict[str, Any], fallback_submission_id: int | None = None) -> KaggleEpisode:
     agents = item.get("agents") if isinstance(item.get("agents"), list) else []
-    matching_agent = next((agent for agent in agents if isinstance(agent, dict) and agent.get("submissionId")), {})
+    matching_agent = next(
+        (
+            agent
+            for agent in agents
+            if isinstance(agent, dict)
+            and fallback_submission_id
+            and parse_int(agent.get("submissionId")) == fallback_submission_id
+        ),
+        {},
+    )
+    if not matching_agent:
+        matching_agent = next((agent for agent in agents if isinstance(agent, dict) and agent.get("submissionId")), {})
     return KaggleEpisode(
         id=parse_int(value(item, "id", "episodeId")),
         submissionId=parse_int(matching_agent.get("submissionId") or fallback_submission_id) or None,
+        competitionName=value(item, "competitionName", "competition_name"),
         reward=value(matching_agent, "reward"),
         status=value(item, "state", "status"),
         date=value(item, "createTime", "date"),

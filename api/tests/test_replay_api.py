@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
-from api.app.models import KaggleLeaderboardEntry
+from api.app.models import KaggleEpisode, KaggleLeaderboardEntry, KaggleSubmission
 from api.app.main import app, leaderboard_cache, read_limited_json_body, store
 from api.app.settings import KaggleCredentials
 
@@ -84,13 +84,28 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
     monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
     monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
     monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_page_size", 2)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_team_submission_limit", 1)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_submissions_per_team", 1)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_episodes_per_submission", 2)
     calls = []
+    submission_calls = []
+    episode_calls = []
 
     async def fake_list_leaderboard(competition: str, page_size: int):
         calls.append((competition, page_size))
         return [KaggleLeaderboardEntry(rank=1, teamId=123, teamName="Alpha", score="100.0")], None
 
+    async def fake_list_team_submissions(team_id: int, team_name: str | None = None):
+        submission_calls.append((team_id, team_name))
+        return [KaggleSubmission(id=111, teamId=team_id, teamName=team_name, score="100.0")]
+
+    async def fake_list_episodes(submission_id: int):
+        episode_calls.append(submission_id)
+        return [KaggleEpisode(id=9001, submissionId=submission_id)]
+
     monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", fake_list_leaderboard)
+    monkeypatch.setattr("api.app.main.kaggle.list_team_submissions", fake_list_team_submissions)
+    monkeypatch.setattr("api.app.main.kaggle.list_episodes", fake_list_episodes)
 
     client = TestClient(app)
     first = client.get("/api/kaggle/leaderboard")
@@ -99,8 +114,37 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["entries"][0]["teamName"] == "Alpha"
+    assert first.json()["entries"][0]["submissions"][0]["id"] == 111
+    assert first.json()["entries"][0]["submissions"][0]["episodes"][0]["id"] == 9001
     assert second.json()["source"] == "cache"
     assert calls == [("pokemon-tcg-ai-battle", 2)]
+    assert submission_calls == [(123, "Alpha")]
+    assert episode_calls == [111]
+
+
+def test_leaderboard_enrichment_failure_does_not_break_refresh(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_page_size", 2)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_team_submission_limit", 1)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_submissions_per_team", 1)
+
+    async def fake_list_leaderboard(competition: str, page_size: int):
+        return [KaggleLeaderboardEntry(rank=1, teamId=123, teamName="Alpha", score="100.0")], None
+
+    async def broken_list_team_submissions(team_id: int, team_name: str | None = None):
+        raise HTTPException(status_code=502, detail="Kaggle enrichment failed.")
+
+    monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", fake_list_leaderboard)
+    monkeypatch.setattr("api.app.main.kaggle.list_team_submissions", broken_list_team_submissions)
+
+    client = TestClient(app)
+    response = client.get("/api/kaggle/leaderboard")
+
+    assert response.status_code == 200
+    assert response.json()["entries"][0]["teamName"] == "Alpha"
+    assert response.json()["entries"][0]["submissions"] == []
+    assert response.json()["source"] == "kaggle"
 
 
 def test_leaderboard_refresh_failure_returns_empty_snapshot(tmp_path, monkeypatch):

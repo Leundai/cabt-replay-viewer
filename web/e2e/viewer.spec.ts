@@ -19,6 +19,25 @@ const leaderboardSnapshot = {
       teamName: 'TrustHub hiroingk',
       score: '1307.9',
       submissionDate: '2026-06-18T08:20:23.220Z',
+      submissions: [
+        {
+          id: 111,
+          teamId: 16376775,
+          teamName: 'TrustHub hiroingk',
+          score: '1307.9',
+          status: 'complete',
+          date: '2026-06-18T08:20:23.220Z',
+          episodes: [
+            {
+              id: 9001,
+              submissionId: 111,
+              competitionName: 'pokemon-tcg-ai-battle',
+              reward: '1',
+              status: 'complete',
+            },
+          ],
+        },
+      ],
     },
     {
       rank: 2,
@@ -26,6 +45,7 @@ const leaderboardSnapshot = {
       teamName: 'The Debauchery Tea Party',
       score: '1302.2',
       submissionDate: '2026-06-20T11:54:31.206Z',
+      submissions: [],
     },
   ],
   refreshedAt: '2026-06-20T12:00:00Z',
@@ -290,7 +310,10 @@ test('Cached leaderboard is visible without exposing admin controls', async ({ p
 
   await expect(page.getByText('Leaderboard', { exact: true })).toBeVisible();
   await expect(page.getByText('TrustHub hiroingk')).toBeVisible();
-  await expect(page.getByText('1307.9')).toBeVisible();
+  await expect(page.getByText('1307.9').first()).toBeVisible();
+  await expect(page.getByText('Submission #111')).toBeVisible();
+  await expect(page.getByText('Replay 9001')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Replay 9001' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Load submissions' })).toHaveCount(0);
   await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toHaveCount(0);
 });
@@ -307,6 +330,7 @@ test('Kaggle admin controls unlock only after hotkey and password', async ({ pag
   await page.getByPlaceholder('CABT_ADMIN_TOKEN').fill('test-token');
   await page.getByRole('button', { name: 'Unlock' }).click();
   await expect(page.getByRole('button', { name: 'Load submissions' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Replay 9001' })).toBeVisible();
   await page.getByRole('button', { name: 'Load submissions' }).click();
   await expect(page.getByText('#111 - 1307.9')).toBeVisible();
 });
