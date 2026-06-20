@@ -99,9 +99,11 @@ const clearMotionLog = (page: Page) =>
 test('Card cinematics fire on the matching action frames', async ({ page }) => {
   await installMotionRecorder(page);
   await routeApi(page);
-  await page.goto('/');
+  // Use the synthetic demo (deterministic draw/play/attack frames), not the real
+  // recorded episode the Demo button now loads.
+  await page.goto('/?replayId=upload-cabt-match');
 
-  await expect(page.getByText('State 0 / 12')).toBeVisible();
+  await expect(page.getByLabel('Action step')).toHaveValue('0');
   const next = page.getByRole('button', { name: 'Next action' });
   // Step deliberately (spaced) so the rapid-step gate treats each as a real step.
   for (let i = 0; i < 8; i += 1) {
@@ -184,7 +186,7 @@ test('Demo replay loads and advances with playback controls', async ({ page }) =
 
   await expect(page.getByText('CABT Replay Viewer')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
-  await expect(page.getByText('State 0 / 12')).toBeVisible();
+  await expect(page.getByLabel('Action step')).toHaveValue('0');
 
   const step = page.getByLabel('Action step');
   await page.getByLabel('Replay speed').selectOption('turbo');
@@ -211,7 +213,7 @@ test('Saved replay can be opened from a direct link', async ({ page }) => {
   await page.goto('/?replayId=upload-cabt-match');
 
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
-  await expect(page.getByText('State 0 / 12')).toBeVisible();
+  await expect(page.getByLabel('Action step')).toHaveValue('0');
 });
 
 test('Kaggle panel reports server-side auth requirements without exposing secrets', async ({ page }) => {
