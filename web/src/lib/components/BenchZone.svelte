@@ -122,8 +122,4 @@
     align-items: start;
     justify-items: start;
   }
-
-  .bench-row.opponent :global(.damage-counter-value) {
-    transform: rotate(180deg);
-  }
 </style>

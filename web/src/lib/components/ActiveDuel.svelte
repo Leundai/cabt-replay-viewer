@@ -116,10 +116,6 @@
     justify-items: start;
   }
 
-  .active-duel :global(.top-active-slot .damage-counter-value) {
-    transform: rotate(180deg);
-  }
-
   @media (max-width: 980px) {
     .active-duel {
       grid-template-rows: var(--active-w) minmax(58px, auto) var(--active-w);

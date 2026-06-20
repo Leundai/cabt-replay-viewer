@@ -247,9 +247,16 @@
   {#if slot.pokemon}
     {#key slot.pokemon.fullName}
       <div class="slot-card" in:cardSwap out:cardSwap>
-        <CardTile card={slot.pokemon} damage={slot.damage} />
+        <CardTile card={slot.pokemon} />
       </div>
     {/key}
+    {#if slot.damage > 0}
+      {#key slot.damage}
+        <span class="damage-counter" class:triple-digit={slot.damage >= 100} title={`${slot.damage} damage`} in:pop>
+          <span class="damage-counter-value">{slot.damage}</span>
+        </span>
+      {/key}
+    {/if}
     {#if displayHp || pokemonTypeIcon}
       <div class="pokemon-status">
         <span
@@ -349,6 +356,48 @@
      visibility (not opacity) so an in-flight cardSwap transition can't reveal it. */
   .board-slot.motion-incoming > * {
     visibility: hidden;
+  }
+
+  /* Damage counter lives at the slot level (not inside the card art) so it always
+     reads ABOVE the HP bubble, energy, tool and condition badges — the status was
+     occluding it before. Upright for both players; no per-side rotation needed. */
+  .damage-counter {
+    position: absolute;
+    top: 32%;
+    left: 50%;
+    z-index: 8;
+    display: inline-grid;
+    place-items: center;
+    width: clamp(34px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.38), 66px);
+    height: clamp(34px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.38), 66px);
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(128, 76, 18, 0.46);
+    background:
+      radial-gradient(circle at 34% 24%, rgba(255, 232, 121, 0.9), transparent 34%),
+      linear-gradient(180deg, #ffb03d 0%, #f39023 54%, #c97018 100%);
+    box-shadow:
+      0 3px 8px rgba(95, 48, 13, 0.28),
+      inset 0 2px 2px rgba(255, 236, 155, 0.7),
+      inset 0 -2px 3px rgba(128, 60, 10, 0.34);
+    color: #fff8df;
+    font-size: clamp(15px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.19), 30px);
+    font-weight: 950;
+    line-height: 1;
+    -webkit-text-stroke: 1.3px #1f1f1f;
+    paint-order: stroke fill;
+    transform: translate(-50%, -50%) scale(var(--motion-scale, 1));
+    transform-origin: center;
+    pointer-events: none;
+    text-shadow: none;
+  }
+
+  .damage-counter-value {
+    display: inline-block;
+  }
+
+  .damage-counter.triple-digit {
+    font-size: clamp(13px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.165), 26px);
   }
 
   .slot-card {

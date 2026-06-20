@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { CardView } from '../game/types';
-  import { pop } from '../motion';
   import { cardInspectorStore } from '../../state/cardInspector.svelte';
 
   type Props = {
@@ -12,7 +11,6 @@
     interactive?: boolean;
     faceDown?: boolean;
     playable?: boolean;
-    damage?: number;
     testId?: string;
     onclick?: (event: MouseEvent) => void;
     ondragstart?: (event: DragEvent) => void;
@@ -28,7 +26,6 @@
     interactive = false,
     faceDown = false,
     playable = false,
-    damage = 0,
     testId = '',
     onclick,
     ondragstart,
@@ -94,13 +91,6 @@
     {#if card?.set}
       <span class="fallback-set">{card.set} {card.setNumber}</span>
     {/if}
-  {/if}
-  {#if damage > 0}
-    {#key damage}
-      <span class="damage-counter" class:triple-digit={damage >= 100} title={`${damage} damage`} in:pop>
-        <span class="damage-counter-value">{damage}</span>
-      </span>
-    {/key}
   {/if}
   {#if interactive}
     <button
@@ -328,45 +318,6 @@
     display: block;
     pointer-events: none;
     -webkit-user-drag: none;
-  }
-
-  .damage-counter {
-    position: absolute;
-    top: 32%;
-    left: 50%;
-    z-index: 10;
-    display: inline-grid;
-    place-items: center;
-    width: clamp(34px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.38), 66px);
-    height: clamp(34px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.38), 66px);
-    padding: 0;
-    border-radius: 999px;
-    border: 1px solid rgba(128, 76, 18, 0.46);
-    background:
-      radial-gradient(circle at 34% 24%, rgba(255, 232, 121, 0.9), transparent 34%),
-      linear-gradient(180deg, #ffb03d 0%, #f39023 54%, #c97018 100%);
-    box-shadow:
-      0 3px 8px rgba(95, 48, 13, 0.28),
-      inset 0 2px 2px rgba(255, 236, 155, 0.7),
-      inset 0 -2px 3px rgba(128, 60, 10, 0.34);
-    color: #fff8df;
-    font-size: clamp(15px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.19), 30px);
-    font-weight: 950;
-    line-height: 1;
-    -webkit-text-stroke: 1.3px #1f1f1f;
-    paint-order: stroke fill;
-    transform: translate(-50%, -50%) scale(var(--motion-scale, 1));
-    transform-origin: center;
-    pointer-events: none;
-    text-shadow: none;
-  }
-
-  .damage-counter-value {
-    display: inline-block;
-  }
-
-  .damage-counter.triple-digit {
-    font-size: clamp(13px, calc(var(--slot-card-w, var(--card-w, 88px)) * 0.165), 26px);
   }
 
   .fallback-name,
