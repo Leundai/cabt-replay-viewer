@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class KaggleCredentials:
+    mode: str
+    username: str = ""
+    key: str = ""
+    bearer_token: str = ""
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.bearer_token or (self.username and self.key))
+
+
+@dataclass
+class Settings:
+    data_dir: Path
+    static_dir: Path
+    kaggle_base_url: str
+    kaggle_credentials: KaggleCredentials
+    admin_token: str
+    allow_public_imports: bool
+    max_replay_bytes: int
+
+
+def load_settings() -> Settings:
+    data_dir = Path(os.getenv("CABT_DATA_DIR", ".data")).expanduser().resolve()
+    static_dir = Path(os.getenv("CABT_STATIC_DIR", "api/app/static")).expanduser().resolve()
+    return Settings(
+        data_dir=data_dir,
+        static_dir=static_dir,
+        kaggle_base_url=os.getenv("KAGGLE_BASE_URL", "https://www.kaggle.com").rstrip("/"),
+        kaggle_credentials=load_kaggle_credentials(),
+        admin_token=os.getenv("CABT_ADMIN_TOKEN", ""),
+        allow_public_imports=os.getenv("CABT_ALLOW_PUBLIC_IMPORTS", "").lower() in {"1", "true", "yes"},
+        max_replay_bytes=int(os.getenv("CABT_MAX_REPLAY_BYTES", str(25 * 1024 * 1024))),
+    )
+
+
+def load_kaggle_credentials() -> KaggleCredentials:
+    bearer = (
+        os.getenv("KAGGLE_BEARER_TOKEN")
+        or os.getenv("KAGGLE_ACCESS_TOKEN")
+        or read_local_access_token()
+    )
+    if bearer:
+        return KaggleCredentials(mode="bearer", bearer_token=bearer)
+
+    username = os.getenv("KAGGLE_USERNAME", "")
+    key = os.getenv("KAGGLE_KEY", "")
+    if not (username and key):
+        local = read_local_kaggle_json()
+        username = username or local.get("username", "")
+        key = key or local.get("key", "")
+
+    if username and key:
+        return KaggleCredentials(mode="basic", username=username, key=key)
+
+    return KaggleCredentials(mode="none")
+
+
+def read_local_kaggle_json() -> dict[str, str]:
+    path = Path.home() / ".kaggle" / "kaggle.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return {}
+    return {
+        "username": str(data.get("username", "")),
+        "key": str(data.get("key", "")),
+    }
+
+
+def read_local_access_token() -> str:
+    path = Path.home() / ".kaggle" / "access_token"
+    if not path.exists():
+        return ""
+    raw = path.read_text().strip()
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    for key in ("access_token", "token", "id_token"):
+        value = data.get(key)
+        if value:
+            return str(value)
+    return ""

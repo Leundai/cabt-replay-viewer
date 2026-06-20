@@ -1,0 +1,37 @@
+{
+  "name": "cabt-replay-viewer-web",
+  "private": true,
+  "description": "Replay-first Svelte viewer for CABT and Kaggle Pokemon TCG AI Battle episodes.",
+  "license": "MIT",
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0 <25"
+  },
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "vite --host 127.0.0.1 --port 5173",
+    "dev:web:e2e": "vite --host 127.0.0.1 --port 53217 --strictPort",
+    "dev:web:lan": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "start": "sirv dist --host 0.0.0.0 --port ${PORT:-4173} --single",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:all": "npm run build && npm test && npm run test:e2e",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@types/node": "^24.12.4",
+    "sirv-cli": "^3.0.1",
+    "svelte": "^5.56.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.16"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0",
+    "tsx": "^4.21.0",
+    "vitest": "^4.1.9"
+  }
+}

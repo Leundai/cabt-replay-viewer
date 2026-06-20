@@ -1,0 +1,11 @@
+dist
+node_modules
+.vite
+.svelte-kit
+*.tsbuildinfo
+playwright-report
+test-results
+.env
+.DS_Store
+sample_submission
+data
