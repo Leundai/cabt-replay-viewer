@@ -338,6 +338,8 @@ test('Implicit sample replay loads and advances with playback controls', async (
   await expect(page.getByText('CABT Replay Viewer')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Demo' })).toHaveCount(0);
   await expect(page.getByTestId('game-status')).toContainText('Kazama Yusuke vs Leundai');
+  await expect(page.locator('[data-testid^="prize-card-0-"]')).toHaveCount(6);
+  await expect(page.locator('[data-testid^="prize-card-1-"]')).toHaveCount(6);
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
   await expect(page.getByLabel('Action step')).toHaveValue('0');
 

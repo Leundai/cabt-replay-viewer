@@ -9,7 +9,14 @@ describe('prize zone', () => {
     );
 
     expect(zone).toMatchObject({ setup: true, remaining: 3 });
-    expect(visiblePrizeSlots(zone)).toEqual([0, 1, 2]);
+    expect(visiblePrizeSlots(zone)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it('keeps the full prize footprint visible with no known prizes', () => {
+    const zone = prizeZone([], true);
+
+    expect(zone).toMatchObject({ remaining: 0, setup: true });
+    expect(visiblePrizeSlots(zone)).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
   it('caps visible slots at the maximum prize layout', () => {
