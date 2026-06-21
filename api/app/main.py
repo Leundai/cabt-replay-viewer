@@ -37,6 +37,7 @@ kaggle = KaggleClient(
 )
 leaderboard_cache = LeaderboardCache(settings.data_dir, ttl_seconds=settings.kaggle_leaderboard_cache_seconds)
 leaderboard_refresh_lock = asyncio.Lock()
+leaderboard_refresh_tasks: dict[str, asyncio.Task[None]] = {}
 
 app = FastAPI(title="CABT Replay Viewer API")
 app.add_middleware(
@@ -346,6 +347,37 @@ async def get_leaderboard_snapshot(competition: str, *, refresh_if_stale: bool, 
             )
 
 
+def schedule_leaderboard_refresh(competition: str) -> bool:
+    if not settings.kaggle_credentials.configured:
+        return False
+
+    running_task = leaderboard_refresh_tasks.get(competition)
+    if running_task and not running_task.done():
+        return True
+
+    task = asyncio.create_task(refresh_leaderboard_cache_in_background(competition))
+    leaderboard_refresh_tasks[competition] = task
+
+    def remove_finished_task(done_task: asyncio.Task[None]) -> None:
+        if leaderboard_refresh_tasks.get(competition) is done_task:
+            leaderboard_refresh_tasks.pop(competition, None)
+
+    task.add_done_callback(remove_finished_task)
+    return True
+
+
+async def refresh_leaderboard_cache_in_background(competition: str) -> None:
+    try:
+        await get_leaderboard_snapshot(competition, refresh_if_stale=True, force=True)
+    except Exception:
+        # The next public read or admin refresh can retry; stale cache stays usable.
+        return
+
+
+def pending_leaderboard_refresh_snapshot(snapshot: KaggleLeaderboardSnapshot) -> KaggleLeaderboardSnapshot:
+    return stale_leaderboard_snapshot(snapshot, "Leaderboard cache is stale; refresh is running in the background.")
+
+
 def stale_leaderboard_snapshot(snapshot: KaggleLeaderboardSnapshot, message: str) -> KaggleLeaderboardSnapshot:
     return snapshot.model_copy(update={"source": "stale" if snapshot.entries else "empty", "stale": True, "refreshInSeconds": 0, "message": message})
 
@@ -446,7 +478,15 @@ async def kaggle_leaderboard(
     competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
     refresh: bool = Query(False),
 ) -> KaggleLeaderboardSnapshot:
-    return await get_leaderboard_snapshot(competition, refresh_if_stale=refresh)
+    if not refresh:
+        return await get_leaderboard_snapshot(competition, refresh_if_stale=False)
+
+    snapshot = leaderboard_cache.get(competition)
+    if not snapshot.stale:
+        return snapshot
+    if schedule_leaderboard_refresh(competition):
+        return pending_leaderboard_refresh_snapshot(snapshot)
+    return snapshot.model_copy(update={"message": "Kaggle credentials are not configured; showing cached leaderboard only."})
 
 
 @app.post("/api/kaggle/leaderboard/refresh", response_model=KaggleLeaderboardSnapshot, dependencies=[Depends(require_admin)])
