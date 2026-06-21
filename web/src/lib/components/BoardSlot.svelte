@@ -6,6 +6,7 @@
   import type { PokemonSlotView } from '../game/types';
   import { cardSwap, pop, EASE_IN_OUT, EASE_OUT } from '../motion';
   import { applyEffectVars } from '../motionEffects';
+  import { motionDelay, motionDuration } from '../replayMotionTiming';
   import { cardMotionStore, type AttackIntent } from '../../state/cardMotion.svelte';
 
   type Props = {
@@ -102,7 +103,14 @@
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, w: rect.width, h: rect.height };
   }
 
-  function spawnImpact(atk: AttackIntent, defCenter: { x: number; y: number; w: number; h: number }, ux: number, uy: number, reduced: boolean) {
+  function spawnImpact(
+    atk: AttackIntent,
+    defCenter: { x: number; y: number; w: number; h: number },
+    ux: number,
+    uy: number,
+    budgetMs: number,
+    reduced: boolean,
+  ) {
     if (!slotRoot) {
       return;
     }
@@ -125,7 +133,12 @@
         { opacity: 0.92, offset: 0.3 },
         { transform: `translate(-50%, -50%) scale(${toScale})`, opacity: 0 },
       ],
-      { duration: 240, easing: EASE_OUT },
+      {
+        duration: reduced
+          ? motionDuration(budgetMs, 0.12, 140, 220)
+          : motionDuration(budgetMs, 0.22, 220, 460),
+        easing: EASE_OUT,
+      },
     );
     anim.onfinish = () => {
       spark.remove();
@@ -153,19 +166,24 @@
     const dy = uy * mag;
 
     if (isDefender) {
-      spawnImpact(atk, d, ux, uy, reduced);
+      spawnImpact(atk, d, ux, uy, budgetMs, reduced);
     }
 
     if (reduced) {
       if (isAttacker || !skipDefenderMove) {
         const el = isAttacker ? atkEl : defEl;
-        activeAnims.push(el.animate([{ opacity: 1 }, { opacity: 0.72, offset: 0.4 }, { opacity: 1 }], { duration: 180, easing: EASE_OUT }));
+        activeAnims.push(
+          el.animate(
+            [{ opacity: 1 }, { opacity: 0.72, offset: 0.4 }, { opacity: 1 }],
+            { duration: motionDuration(budgetMs, 0.12, 140, 220), easing: EASE_OUT },
+          ),
+        );
       }
       return;
     }
 
     if (isAttacker) {
-      const duration = Math.min(300, Math.round(budgetMs * 0.55));
+      const duration = motionDuration(budgetMs, 0.42, 260, 680);
       activeAnims.push(
         atkEl.animate(
           [
@@ -180,8 +198,8 @@
     }
 
     if (isDefender && !skipDefenderMove) {
-      const duration = Math.min(260, Math.round(budgetMs * 0.5));
-      const delay = Math.min(160, Math.round(budgetMs * 0.55 * 0.46));
+      const duration = motionDuration(budgetMs, 0.34, 220, 560);
+      const delay = motionDelay(budgetMs, 0.18, 320);
       activeAnims.push(
         defEl.animate(
           [

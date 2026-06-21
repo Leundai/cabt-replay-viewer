@@ -1,6 +1,6 @@
 import type { CardView, GameView, PlayerView } from '../lib/game/types';
 import { attackEffectKind, type AttackEffectKind } from '../lib/motionEffects';
-import { REPLAY_PLAYBACK_SPEEDS, type ReplayPlaybackSpeedId } from './replayPlaybackModel';
+import { replayMotionBudgetMs, type ReplayPlaybackSpeedId } from './replayPlaybackModel';
 
 /**
  * Pure card-motion model. Turns the replay's append-only log stream into
@@ -79,15 +79,10 @@ export type MotionEligibility = {
 };
 
 const RAPID_STEP_MS = 220;
-const DEFAULT_INTERVAL_MS = 800;
-const MANUAL_BUDGET_MS = 1300;
+const RAPID_STEP_MOTION_BUDGET_MS = 260;
 
 function slotKey(owner: number, kind: 'active' | 'bench', index: number): string {
   return `slot-${owner}-${kind}-${index}`;
-}
-
-function intervalFor(speedId: ReplayPlaybackSpeedId): number {
-  return REPLAY_PLAYBACK_SPEEDS.find((speed) => speed.id === speedId)?.intervalMs ?? DEFAULT_INTERVAL_MS;
 }
 
 /** Read a LogView's raw params as a typed CABT log entry. */
@@ -265,15 +260,14 @@ export function planEligibility(args: {
   if (playing && speedId === 'turbo') {
     return null;
   }
-  const interval = playing ? intervalFor(speedId) : MANUAL_BUDGET_MS;
-  const budgetMs = playing ? Math.max(160, interval - 80) : MANUAL_BUDGET_MS;
+  const budgetMs = replayMotionBudgetMs(speedId);
   // Mashing the step key (paused) outruns any cadence — clip to attack only.
   if (dt < RAPID_STEP_MS) {
-    return { attack: true, draw: false, reveal: false, budgetMs: Math.min(budgetMs, 240) };
+    return { attack: true, draw: false, reveal: false, budgetMs: Math.min(budgetMs, RAPID_STEP_MOTION_BUDGET_MS) };
   }
-  // Fast autoplay (400ms): only the short in-place attack fits.
+  // Fast autoplay: only the short in-place attack fits.
   if (playing && speedId === 'fast') {
-    return { attack: true, draw: false, reveal: false, budgetMs: Math.min(budgetMs, 300) };
+    return { attack: true, draw: false, reveal: false, budgetMs };
   }
   // Normal / slow autoplay, or any calm manual step: the full repertoire.
   return { attack: true, draw: true, reveal: true, budgetMs };

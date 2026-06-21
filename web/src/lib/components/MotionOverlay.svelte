@@ -3,6 +3,7 @@
   import { safeCardImageUrl } from '../game/cardImages';
   import { EASE_IN_OUT, EASE_OUT } from '../motion';
   import { applyEffectVars, attackEffectKind, type AttackEffectKind } from '../motionEffects';
+  import { motionDelay, motionDuration } from '../replayMotionTiming';
   import { cardMotionStore, type AttackIntent, type DrawIntent, type PlayIntent } from '../../state/cardMotion.svelte';
 
   // A FLAT overlay that covers the board. It deliberately does NOT inherit the
@@ -84,7 +85,7 @@
     return Math.hypot(end.cx - start.cx, end.cy - start.cy);
   }
 
-  function decorateReveal(node: HTMLElement, kind: AttackEffectKind, duration: number, reduced: boolean) {
+  function decorateReveal(node: HTMLElement, kind: AttackEffectKind, budgetMs: number, reduced: boolean) {
     applyEffectVars(node, kind);
     if (reduced) {
       return;
@@ -100,7 +101,12 @@
           { opacity: 0.82, offset: 0.38 },
           { transform: 'translateX(150%) rotate(18deg)', opacity: 0 },
         ],
-        { duration: Math.min(duration, 620), delay: 70, easing: EASE_OUT, fill: 'both' },
+        {
+          duration: motionDuration(budgetMs, 0.5, 260, 900),
+          delay: motionDelay(budgetMs, 0.08, 140),
+          easing: EASE_OUT,
+          fill: 'both',
+        },
       ),
     );
 
@@ -114,7 +120,7 @@
           { opacity: 0.72, offset: 0.3 },
           { transform: 'scale(1.18)', opacity: 0 },
         ],
-        { duration: Math.min(duration + 160, 760), easing: EASE_OUT, fill: 'both' },
+        { duration: motionDuration(budgetMs, 0.62, 340, 1100), easing: EASE_OUT, fill: 'both' },
       ),
     );
   }
@@ -148,7 +154,9 @@
     const length = lineLength(attacker, defender);
     const beamH = clamp(Math.min(attacker.w, defender.w) * 0.18, 12, 34);
     const projectileSize = clamp(Math.min(attacker.w, defender.w) * 0.28, 20, 48);
-    const total = Math.min(budgetMs, reduced ? 220 : 520);
+    const total = reduced
+      ? motionDuration(budgetMs, 0.16, 160, 220)
+      : motionDuration(budgetMs, 0.62, 320, 900);
 
     if (!reduced) {
       const beam = makeNode('fx-attack-beam', length, beamH);
@@ -198,7 +206,12 @@
               { opacity: 0.96, offset: 0.22 },
               { transform: frame(sx, sy, sparkSize, sparkSize, 1.15), opacity: 0 },
             ],
-            { duration: 260, delay: Math.min(260, total * 0.58), easing: EASE_OUT, fill: 'backwards' },
+            {
+              duration: motionDuration(budgetMs, 0.24, 180, 420),
+              delay: motionDelay(budgetMs, 0.36, 520),
+              easing: EASE_OUT,
+              fill: 'backwards',
+            },
           ),
           spark,
         );
@@ -221,7 +234,12 @@
               { opacity: 0.78, offset: 0.24 },
               { transform: frame(defender.cx, defender.cy, ringSize, ringSize, 1.55), opacity: 0 },
             ],
-        { duration: reduced ? 180 : 320, delay: reduced ? 0 : Math.min(230, total * 0.55), easing: EASE_OUT, fill: 'backwards' },
+        {
+          duration: reduced ? motionDuration(budgetMs, 0.14, 150, 220) : motionDuration(budgetMs, 0.28, 220, 520),
+          delay: reduced ? 0 : motionDelay(budgetMs, 0.34, 620),
+          easing: EASE_OUT,
+          fill: 'backwards',
+        },
       ),
       ring,
     );
@@ -240,13 +258,19 @@
       // No flight — a single presence cue fading in at the hand.
       const node = makeNode('motion-ghost', cardW, cardH);
       node.style.transform = frame(hand.cx, hand.cy, cardW, cardH, 0.96);
-      track(node.animate([{ opacity: 0 }, { opacity: 0.85, offset: 0.5 }, { opacity: 0 }], { duration: 220, easing: EASE_OUT }), node);
+      track(
+        node.animate(
+          [{ opacity: 0 }, { opacity: 0.85, offset: 0.5 }, { opacity: 0 }],
+          { duration: motionDuration(budgetMs, 0.12, 160, 240), easing: EASE_OUT },
+        ),
+        node,
+      );
       return;
     }
 
     const count = Math.min(intent.count, 4);
-    const stagger = intent.count > 4 ? 35 : 45;
-    const duration = Math.min(260, Math.max(180, Math.round(budgetMs * 0.4)));
+    const stagger = motionDuration(budgetMs, intent.count > 4 ? 0.025 : 0.034, 35, 70);
+    const duration = motionDuration(budgetMs, 0.38, 220, 720);
     for (let i = 0; i < count; i += 1) {
       const t = count <= 1 ? 0.5 : i / (count - 1);
       const targetX = hand.x + hand.w * (0.2 + 0.6 * t);
@@ -333,7 +357,7 @@
     if (reduced) {
       // Surface big at centre, hold, fade — information without the flight.
       node.style.transform = frame(heroX, heroY, baseW, baseH, heroScale);
-      const hold = Math.min(budgetMs, 460);
+      const hold = motionDuration(budgetMs, 0.24, 240, 460);
       track(
         node.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: hold, easing: EASE_OUT }),
         node,
@@ -341,7 +365,7 @@
       return;
     }
 
-    const total = Math.min(budgetMs, 640);
+    const total = motionDuration(budgetMs, 0.72, 420, 1280);
     const rise = Math.round(total * 0.3);
     const hold = Math.round(total * 0.26);
     const r1 = rise / total;

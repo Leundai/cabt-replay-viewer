@@ -6,6 +6,7 @@ import {
   planEligibility,
   type RawLog,
 } from './cardMotionModel';
+import { replayMotionBudgetMs } from './replayPlaybackModel';
 
 function card(id: number, name = `Card ${id}`, overrides: Partial<CardView> = {}): CardView {
   return { id, name, fullName: name, ...overrides };
@@ -238,17 +239,26 @@ describe('planEligibility', () => {
   it('clips to attack-only when steps are mashed faster than the cadence', () => {
     const plan = planEligibility({ ...base, dir: 1, speedId: 'normal', dt: 80 });
     expect(plan).toMatchObject({ attack: true, draw: false, reveal: false });
-    expect(plan?.budgetMs).toBeLessThanOrEqual(240);
+    expect(plan?.budgetMs).toBeLessThanOrEqual(260);
   });
 
   it('allows the full repertoire on a calm manual step', () => {
     const plan = planEligibility({ ...base, dir: 1, speedId: 'normal' });
     expect(plan).toMatchObject({ attack: true, draw: true, reveal: true });
-    expect(plan?.budgetMs).toBeGreaterThan(300);
+    expect(plan?.budgetMs).toBe(replayMotionBudgetMs('normal'));
   });
 
   it('allows the full repertoire during normal autoplay', () => {
-    const plan = planEligibility({ ...base, dir: 1, speedId: 'normal', playing: true, dt: 800 });
+    const plan = planEligibility({ ...base, dir: 1, speedId: 'normal', playing: true, dt: 1600 });
     expect(plan).toMatchObject({ attack: true, draw: true, reveal: true });
+    expect(plan?.budgetMs).toBe(replayMotionBudgetMs('normal'));
+  });
+
+  it('scales manual motion budgets with the selected speed', () => {
+    const slow = planEligibility({ ...base, dir: 1, speedId: 'slow' });
+    const normal = planEligibility({ ...base, dir: 1, speedId: 'normal' });
+    const fast = planEligibility({ ...base, dir: 1, speedId: 'fast' });
+    expect(slow?.budgetMs).toBeGreaterThan(normal?.budgetMs ?? 0);
+    expect(normal?.budgetMs).toBeGreaterThan(fast?.budgetMs ?? 0);
   });
 });
