@@ -156,17 +156,15 @@ async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry, limiter: Kaggl
     except Exception:
         return entry
 
-    ranked_submission_id: int | None = entry.submissionId
     enriched_submissions = []
     selected_submissions = select_leaderboard_submissions(
         entry,
         submissions,
         settings.kaggle_leaderboard_submissions_per_team,
     )
+    ranked_submission_id = leaderboard_submission_id(entry, selected_submissions)
     for submission in selected_submissions:
-        updates = leaderboard_submission_updates(entry, submission)
-        if is_leaderboard_submission(entry, submission) and submission.id > 0:
-            ranked_submission_id = submission.id
+        updates = leaderboard_submission_updates(entry, submission, ranked_submission_id)
 
         episodes = await safe_list_submission_episodes(submission.id, limiter)
         if episodes:
@@ -194,6 +192,19 @@ def select_leaderboard_submissions(
     return [submission for _index, submission in ranked[:limit]]
 
 
+def leaderboard_submission_id(
+    entry: KaggleLeaderboardEntry,
+    submissions: list[KaggleSubmission],
+) -> int | None:
+    for submission in submissions:
+        if entry.submissionId is not None and submission.id == entry.submissionId:
+            return submission.id
+    for submission in submissions:
+        if leaderboard_submission_candidate(entry, submission):
+            return submission.id
+    return None
+
+
 def leaderboard_submission_sort_key(
     entry: KaggleLeaderboardEntry,
     submission: KaggleSubmission,
@@ -208,13 +219,14 @@ def leaderboard_submission_sort_key(
 def leaderboard_submission_updates(
     entry: KaggleLeaderboardEntry,
     submission: KaggleSubmission,
+    ranked_submission_id: int | None,
 ) -> dict[str, object]:
     updates: dict[str, object] = {}
     if submission.teamId is None:
         updates["teamId"] = entry.teamId
     if not submission.teamName:
         updates["teamName"] = entry.teamName
-    if is_leaderboard_submission(entry, submission):
+    if submission.id == ranked_submission_id:
         if entry.score is not None:
             updates["score"] = entry.score
         if entry.submissionDate:
@@ -222,9 +234,7 @@ def leaderboard_submission_updates(
     return updates
 
 
-def is_leaderboard_submission(entry: KaggleLeaderboardEntry, submission: KaggleSubmission) -> bool:
-    if entry.submissionId is not None:
-        return submission.id == entry.submissionId
+def leaderboard_submission_candidate(entry: KaggleLeaderboardEntry, submission: KaggleSubmission) -> bool:
     return datetimes_match(entry.submissionDate, submission.date) or decimal_values_match(entry.score, submission.score)
 
 
