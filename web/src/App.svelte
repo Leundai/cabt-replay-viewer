@@ -96,14 +96,23 @@
       await openStoredReplay(replayId);
       return;
     }
-    await loadDemoReplay();
+    await loadInitialDemoReplay();
   }
 
   async function loadDemoReplay() {
+    await loadDemoReplayFromDisk(true);
+  }
+
+  async function loadInitialDemoReplay() {
+    await loadDemoReplayFromDisk(false);
+  }
+
+  async function loadDemoReplayFromDisk(autoplay: boolean) {
     activeLibraryReplayId = 'demo';
     // A real recorded episode (Kazama Yusuke vs Leundai) so the demo shows real
     // cards and art rather than synthetic placeholders.
     await replayStore.loadSaved('leundai-kazama-lucario-carm.json');
+    startLoadedReplay(autoplay);
   }
 
   async function openStoredReplay(id: string) {
@@ -113,14 +122,24 @@
     const local = await localReplayStore.get(id);
     if (local != null) {
       await replayStore.loadData(local);
+      startLoadedReplay(true);
       return;
     }
     await replayStore.loadApiReplay(id);
+    startLoadedReplay(true);
   }
 
   async function openReplayData(replayData: unknown) {
     activeLibraryReplayId = 'local';
     await replayStore.loadData(replayData);
+    startLoadedReplay(true);
+  }
+
+  function startLoadedReplay(autoplay: boolean) {
+    if (!autoplay || replayStore.error) {
+      return;
+    }
+    replayStore.startPlayback();
   }
 
   function switchSides() {

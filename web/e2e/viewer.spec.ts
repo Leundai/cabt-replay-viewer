@@ -245,6 +245,8 @@ test('Card cinematics fire on the matching action frames', async ({ page }) => {
   // recorded episode the Demo button now loads.
   await page.goto('/?replayId=upload-cabt-match');
 
+  await page.getByRole('button', { name: 'Pause replay' }).click();
+  await page.getByLabel('Action step').fill('0');
   await expect(page.getByLabel('Action step')).toHaveValue('0');
   await expect(page.locator('[data-testid="motion-overlay"]')).toBeVisible();
   await expect(page.locator('[data-testid="deck-pile-0"]')).toBeVisible();
@@ -353,17 +355,18 @@ test('Downloaded JSON can be imported and appears in the saved replay library', 
   const chooser = await fileChooserPromise;
   await chooser.setFiles('public/game-logs/cabt-match.json');
 
-  await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pause replay' })).toBeVisible();
   await expect(page.getByText('cabt-match.json')).toBeVisible();
   await expect(page.getByText('12 actions')).toBeVisible();
+  await expect.poll(async () => Number(await page.getByLabel('Action step').inputValue())).toBeGreaterThan(0);
 });
 
 test('Saved replay can be opened from a direct link', async ({ page }) => {
   await routeApi(page);
   await page.goto('/?replayId=upload-cabt-match');
 
-  await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
-  await expect(page.getByLabel('Action step')).toHaveValue('0');
+  await expect(page.getByRole('button', { name: 'Pause replay' })).toBeVisible();
+  await expect.poll(async () => Number(await page.getByLabel('Action step').inputValue())).toBeGreaterThan(0);
 });
 
 test('Cached leaderboard is visible without exposing admin controls', async ({ page }) => {
@@ -389,8 +392,8 @@ test('Cached leaderboard replay opens without admin unlock', async ({ page }) =>
 
   await page.locator('summary').filter({ hasText: '3 replays' }).click();
   await page.getByRole('button', { name: /Episode 9001/ }).click();
-  await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
-  await expect(page.getByLabel('Action step')).toHaveValue('0');
+  await expect(page.getByRole('button', { name: 'Pause replay' })).toBeVisible();
+  await expect.poll(async () => Number(await page.getByLabel('Action step').inputValue())).toBeGreaterThan(0);
   await expect(page.getByText('TrustHub hiroingk vs The Debauchery Tea Party').first()).toBeVisible();
   await expect(page.getByPlaceholder('CABT_ADMIN_TOKEN')).toHaveCount(0);
 });
