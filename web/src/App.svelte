@@ -35,6 +35,7 @@
   let viewedCards = $derived(zoneViewerStore.cardsFor(game));
   let zoneViewerIsStadium = $derived(zoneViewerStore.zone === 'stadium');
   let statusLabel = $derived(replayStore.loading ? 'Loading replay' : replayStore.error);
+  let replayMatchupLabel = $derived(formatReplayMatchup(replay));
 
   onMount(() => {
     const stopThemeSync = viewSettingsStore.startThemeSync();
@@ -138,6 +139,11 @@
     cardMotionStore.clearAll();
   }
 
+  function formatReplayMatchup(snapshot: ReplaySnapshot | null): string {
+    const players = snapshot?.players.map((player) => player.name).filter(Boolean) ?? [];
+    return players.length >= 2 ? `${players[0]} vs ${players[1]}` : '';
+  }
+
   // --- Cinema HUD auto-hide ---------------------------------------------------
   // The chrome (status chip, settings gear, transport dock + caption) dims away
   // during uninterrupted playback so the board owns the screen, and returns on
@@ -188,6 +194,7 @@
     {#if replay && game && topPlayer && bottomPlayer}
       <TableShell debugZones={viewSettingsStore.debugZones} replayMode>
         <GameStatus
+          matchupLabel={replayMatchupLabel}
           phaseLabel={game.phaseLabel}
           turn={game.turn}
           activePlayerName={activePlayer?.name}

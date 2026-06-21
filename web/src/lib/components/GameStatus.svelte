@@ -1,5 +1,6 @@
 <script lang="ts">
   type Props = {
+    matchupLabel?: string;
     phaseLabel: string;
     turn: number;
     activePlayerName?: string;
@@ -7,11 +8,14 @@
     gameFinished?: boolean;
   };
 
-  let { phaseLabel, turn, activePlayerName = '', resultLabel = '', gameFinished = false }: Props = $props();
+  let { matchupLabel = '', phaseLabel, turn, activePlayerName = '', resultLabel = '', gameFinished = false }: Props = $props();
 </script>
 
-<div class="game-status">
-  <strong>{resultLabel || phaseLabel}</strong>
+<div class="game-status" data-testid="game-status">
+  <strong class:matchup={matchupLabel}>{matchupLabel || resultLabel || phaseLabel}</strong>
+  {#if matchupLabel}
+    <span>{resultLabel || phaseLabel}</span>
+  {/if}
   <span>Turn {turn}</span>
   {#if !gameFinished}
     <span>{activePlayerName}</span>
@@ -31,6 +35,7 @@
     align-items: center;
     gap: 8px;
     flex-wrap: nowrap;
+    max-width: calc(100vw - 128px);
     white-space: nowrap;
     pointer-events: auto;
     padding: 5px 12px;
@@ -51,6 +56,19 @@
   }
 
   .game-status strong {
+    min-width: 0;
     color: var(--accent-strong);
+  }
+
+  .game-status strong.matchup {
+    max-width: min(44vw, 460px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (max-width: 760px) {
+    .game-status strong.matchup {
+      max-width: 38vw;
+    }
   }
 </style>

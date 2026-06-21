@@ -331,6 +331,7 @@ test('Demo replay loads and advances with playback controls', async ({ page }) =
   await page.goto('/');
 
   await expect(page.getByText('CABT Replay Viewer')).toBeVisible();
+  await expect(page.getByTestId('game-status')).toContainText('Kazama Yusuke vs Leundai');
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
   await expect(page.getByLabel('Action step')).toHaveValue('0');
 
