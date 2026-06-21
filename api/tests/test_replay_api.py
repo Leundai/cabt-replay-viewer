@@ -392,6 +392,57 @@ def test_cached_leaderboard_episode_can_be_imported_publicly(tmp_path, monkeypat
     assert calls == [9001]
 
 
+def test_stale_cached_leaderboard_episode_import_uses_visible_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr(store, "root", tmp_path)
+    monkeypatch.setattr(store, "replay_dir", tmp_path / "replays")
+    monkeypatch.setattr(store, "index_path", tmp_path / "index.json")
+    monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
+    leaderboard_cache.save(
+        "pokemon-tcg-ai-battle",
+        [
+            KaggleLeaderboardEntry(
+                rank=1,
+                teamId=123,
+                teamName="Alpha",
+                score="100.0",
+                submissions=[KaggleSubmission(id=111, episodes=[KaggleEpisode(id=9001, submissionId=111)])],
+            )
+        ],
+        page_size=50,
+    )
+    path = tmp_path / "leaderboards" / "pokemon-tcg-ai-battle.json"
+    data = json.loads(path.read_text())
+    data["expiresAt"] = "2000-01-01T00:00:00+00:00"
+    path.write_text(json.dumps(data))
+    replay_calls = []
+    leaderboard_calls = []
+
+    async def fake_get_replay(episode_id: int):
+        replay_calls.append(episode_id)
+        return {
+            "title": "Stale cached leaderboard replay",
+            "info": {"TeamNames": ["Alpha", "Beta"]},
+            "steps": [[{"visualize": []}, {"action": []}]],
+        }
+
+    async def fake_list_leaderboard(competition: str, page_size: int):
+        leaderboard_calls.append((competition, page_size))
+        return [], None
+
+    monkeypatch.setattr("api.app.main.kaggle.get_replay", fake_get_replay)
+    monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", fake_list_leaderboard)
+
+    client = TestClient(app)
+    response = client.post("/api/kaggle/leaderboard/episodes/9001/import")
+
+    assert response.status_code == 200
+    assert response.json()["replay"]["id"] == "kaggle-9001"
+    assert response.json()["replay"]["submissionId"] == 111
+    assert replay_calls == [9001]
+    assert leaderboard_calls == []
+
+
 def test_uncached_leaderboard_episode_cannot_be_imported_publicly(tmp_path, monkeypatch):
     monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
     leaderboard_cache.save(

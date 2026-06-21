@@ -479,7 +479,7 @@ async def import_cached_leaderboard_episode(
     episode_id: int,
     competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
 ) -> dict[str, object]:
-    snapshot = await get_leaderboard_snapshot(competition, refresh_if_stale=True)
+    snapshot = await get_leaderboard_snapshot(competition, refresh_if_stale=False)
     submission_id = find_cached_leaderboard_submission(snapshot, episode_id)
     if submission_id is None:
         raise HTTPException(status_code=404, detail="Episode is not available in the cached leaderboard.")

@@ -64,6 +64,8 @@
   let selectedSubmissionId = $state<number | null>(null);
   let kaggleLoading = $state(false);
   let kaggleError = $state('');
+  let staleLeaderboardRefreshInFlight = false;
+  let lastStaleLeaderboardRefreshAt = 0;
 
   let filteredSubmissions = $derived(filterSubmissions(submissions, searchQuery));
   let filteredLeaderboard = $derived(filterLeaderboard(leaderboard?.entries ?? [], searchQuery));
@@ -128,11 +130,36 @@
     leaderboardLoading = !leaderboard;
     leaderboardError = '';
     try {
-      leaderboard = await getKaggleLeaderboard(competition.trim() || defaultCompetition);
+      const snapshot = await getKaggleLeaderboard(competition.trim() || defaultCompetition);
+      leaderboard = snapshot;
+      if (snapshot.stale) {
+        void refreshStaleLeaderboard(snapshot.competition);
+      }
     } catch (error) {
       leaderboardError = error instanceof Error ? error.message : String(error);
     } finally {
       leaderboardLoading = false;
+    }
+  }
+
+  async function refreshStaleLeaderboard(competitionId: string) {
+    const now = Date.now();
+    if (staleLeaderboardRefreshInFlight || now - lastStaleLeaderboardRefreshAt < 60_000) {
+      return;
+    }
+    staleLeaderboardRefreshInFlight = true;
+    lastStaleLeaderboardRefreshAt = now;
+    try {
+      const refreshed = await getKaggleLeaderboard(competitionId, { refresh: true });
+      if ((leaderboard?.competition || competition.trim() || defaultCompetition) === refreshed.competition) {
+        leaderboard = refreshed;
+      }
+    } catch (error) {
+      if (!leaderboard) {
+        leaderboardError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      staleLeaderboardRefreshInFlight = false;
     }
   }
 
