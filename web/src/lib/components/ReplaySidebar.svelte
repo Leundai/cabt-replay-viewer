@@ -332,8 +332,16 @@
     return `${submissionCount} ${submissionLabel} - ${replayCount} ${replayLabel}`;
   }
 
-  function formatSubmissionMeta(submission: KaggleSubmission): string {
+  function isLeaderboardSubmission(entry: KaggleLeaderboardEntry, submission: KaggleSubmission): boolean {
+    if (entry.submissionId !== undefined && entry.submissionId !== null) {
+      return submission.id === entry.submissionId;
+    }
+    return Boolean(entry.submissionDate && submission.date === entry.submissionDate);
+  }
+
+  function formatSubmissionMeta(submission: KaggleSubmission, entry: KaggleLeaderboardEntry): string {
     return [
+      isLeaderboardSubmission(entry, submission) ? 'Leaderboard run' : '',
       submission.score !== undefined && submission.score !== null ? `Score ${submission.score}` : '',
       formatDate(submission.date),
       submission.status,
@@ -527,7 +535,7 @@
                   <div class="leaderboard-submission">
                     <span class="submission-summary">
                       <strong>Submission #{submission.id}</strong>
-                      <small>{formatSubmissionMeta(submission)}</small>
+                      <small>{formatSubmissionMeta(submission, entry)}</small>
                     </span>
                     {#if submission.episodes?.length}
                       {#if submission.episodes.length === 1}

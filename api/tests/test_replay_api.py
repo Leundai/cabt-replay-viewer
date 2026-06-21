@@ -127,6 +127,65 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
     assert episode_calls == [111]
 
 
+def test_leaderboard_enrichment_marks_ranked_submission_and_preserves_leaderboard_score(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_page_size", 2)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_team_submission_limit", 1)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_submissions_per_team", 2)
+    monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_episodes_per_submission", 1)
+    episode_calls = []
+
+    async def fake_list_leaderboard(competition: str, page_size: int):
+        return [
+            KaggleLeaderboardEntry(
+                rank=30,
+                teamId=16392629,
+                teamName="Leundai",
+                score="1128.9",
+                submissionDate="2026-06-20T18:21:28.823333300Z",
+            )
+        ], None
+
+    async def fake_list_team_submissions(team_id: int, team_name: str | None = None):
+        return [
+            KaggleSubmission(
+                id=53871163,
+                teamId=team_id,
+                teamName=team_name,
+                score="1000.0",
+                date="2026-06-19T18:21:28.823Z",
+            ),
+            KaggleSubmission(
+                id=53890920,
+                teamId=team_id,
+                teamName=team_name,
+                score="899.1",
+                date="2026-06-20T18:21:28.823Z",
+            ),
+        ]
+
+    async def fake_list_episodes(submission_id: int):
+        episode_calls.append(submission_id)
+        return [KaggleEpisode(id=9000 + submission_id, submissionId=submission_id)]
+
+    monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", fake_list_leaderboard)
+    monkeypatch.setattr("api.app.main.kaggle.list_team_submissions", fake_list_team_submissions)
+    monkeypatch.setattr("api.app.main.kaggle.list_episodes", fake_list_episodes)
+
+    client = TestClient(app)
+    response = client.get("/api/kaggle/leaderboard")
+
+    assert response.status_code == 200
+    entry = response.json()["entries"][0]
+    assert entry["submissionId"] == 53890920
+    assert [submission["id"] for submission in entry["submissions"]] == [53890920, 53871163]
+    assert entry["submissions"][0]["score"] == "1128.9"
+    assert entry["submissions"][0]["date"] == "2026-06-20T18:21:28.823333300Z"
+    assert entry["submissions"][1]["score"] == "1000.0"
+    assert episode_calls == [53890920, 53871163]
+
+
 def test_leaderboard_enrichment_failure_does_not_break_refresh(tmp_path, monkeypatch):
     monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
     monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))

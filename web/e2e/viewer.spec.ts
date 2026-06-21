@@ -30,6 +30,7 @@ const leaderboardSnapshot = {
       teamId: 16376775,
       teamName: 'TrustHub hiroingk',
       score: '1307.9',
+      submissionId: 111,
       submissionDate: '2026-06-18T08:20:23.220Z',
       submissions: [
         {
@@ -71,6 +72,27 @@ const leaderboardSnapshot = {
               agents: [
                 { submissionId: 111, teamId: 16376775, teamName: 'TrustHub hiroingk', reward: '1' },
                 { submissionId: 444, teamId: 16394000, teamName: 'Kazama', reward: '-1' },
+              ],
+            },
+          ],
+        },
+        {
+          id: 110,
+          teamId: 16376775,
+          teamName: 'TrustHub hiroingk',
+          score: '1294.4',
+          status: 'complete',
+          date: '2026-06-17T08:20:23.220Z',
+          episodes: [
+            {
+              id: 8999,
+              submissionId: 110,
+              competitionName: 'pokemon-tcg-ai-battle',
+              reward: '-1',
+              status: 'complete',
+              agents: [
+                { submissionId: 110, teamId: 16376775, teamName: 'TrustHub hiroingk', reward: '-1' },
+                { submissionId: 555, teamId: 16378170, teamName: 'The Debauchery Tea Party', reward: '1' },
               ],
             },
           ],
@@ -488,6 +510,9 @@ test('Cached leaderboard is visible without exposing admin controls', async ({ p
   await expect(page.getByText('TrustHub hiroingk', { exact: true })).toBeVisible();
   await expect(page.getByText('1307.9').first()).toBeVisible();
   await expect(page.getByText('Submission #111')).toBeVisible();
+  await expect(page.getByText('Submission #110')).toBeVisible();
+  await expect(page.getByText('2 submissions - 4 replays')).toBeVisible();
+  await expect(page.getByText(/Leaderboard run - Score 1307\.9/)).toBeVisible();
   const replaySummary = page.locator('summary').filter({ hasText: '3 replays' });
   await expect(replaySummary).toBeVisible();
   await replaySummary.click();

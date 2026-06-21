@@ -168,6 +168,7 @@ def normalize_leaderboard_entry(item: dict[str, Any], rank: int) -> KaggleLeader
     return KaggleLeaderboardEntry(
         rank=rank,
         teamId=parse_optional_int(value(item, "teamId", "team_id")),
+        submissionId=parse_optional_int(value(item, "ref", "id", "submissionId", "submission_id")),
         teamName=str(value(item, "teamName", "team_name") or "Team"),
         score=value(item, "score"),
         submissionDate=value(item, "submissionDate", "submission_date", "date"),

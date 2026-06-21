@@ -52,6 +52,7 @@ export type KaggleSubmission = {
 export type KaggleLeaderboardEntry = {
   rank: number;
   teamId?: number;
+  submissionId?: number;
   teamName: string;
   score?: number | string;
   submissionDate?: string;
