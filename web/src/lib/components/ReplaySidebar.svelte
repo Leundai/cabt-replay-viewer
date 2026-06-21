@@ -25,14 +25,12 @@
 
   type Props = {
     activeReplayId: string;
-    loadDemoReplay: () => void | Promise<void>;
     openStoredReplay: (id: string) => void | Promise<void>;
     openReplayData: (replayData: unknown) => void | Promise<void>;
   };
 
   let {
     activeReplayId,
-    loadDemoReplay,
     openStoredReplay,
     openReplayData,
   }: Props = $props();
@@ -475,7 +473,6 @@
       <strong>CABT Replay Viewer</strong>
       <span>Kaggle episodes, downloaded JSON, and saved replays.</span>
     </div>
-    <button type="button" onclick={loadDemoReplay}>Demo</button>
   </header>
 
   <label class="search-box">

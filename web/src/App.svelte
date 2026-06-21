@@ -96,23 +96,14 @@
       await openStoredReplay(replayId);
       return;
     }
-    await loadInitialDemoReplay();
+    await loadImplicitSampleReplay();
   }
 
-  async function loadDemoReplay() {
-    await loadDemoReplayFromDisk(true);
-  }
-
-  async function loadInitialDemoReplay() {
-    await loadDemoReplayFromDisk(false);
-  }
-
-  async function loadDemoReplayFromDisk(autoplay: boolean) {
-    activeLibraryReplayId = 'demo';
-    // A real recorded episode (Kazama Yusuke vs Leundai) so the demo shows real
-    // cards and art rather than synthetic placeholders.
+  async function loadImplicitSampleReplay() {
+    activeLibraryReplayId = '';
+    // A real recorded episode (Kazama Yusuke vs Leundai) keeps the empty state
+    // useful without making it a selectable library item.
     await replayStore.loadSaved('leundai-kazama-lucario-carm.json');
-    startLoadedReplay(autoplay);
   }
 
   async function openStoredReplay(id: string) {
@@ -150,12 +141,11 @@
     zoneViewerStore.show(playerIndex, zone, title, faceDown);
   }
 
-  function closeReplay() {
-    activeLibraryReplayId = '';
-    replayStore.clear();
+  async function closeReplay() {
     cardInspectorStore.close();
     zoneViewerStore.close();
     cardMotionStore.clearAll();
+    await loadImplicitSampleReplay();
   }
 
   function formatReplayMatchup(snapshot: ReplaySnapshot | null): string {
@@ -198,7 +188,6 @@
 <main class="app-shell">
   <ReplaySidebar
     activeReplayId={activeLibraryReplayId}
-    {loadDemoReplay}
     {openStoredReplay}
     {openReplayData}
   />
@@ -327,8 +316,8 @@
       </TableShell>
     {:else}
       <div class="empty-stage">
-        <strong>{statusLabel || 'Choose a replay'}</strong>
-        <span>Load the demo, drop a JSON file, or import an episode from Kaggle.</span>
+        <strong>{statusLabel || 'No replay selected'}</strong>
+        <span>Drop a JSON file, open a saved replay, or import an episode from Kaggle.</span>
       </div>
     {/if}
   </section>

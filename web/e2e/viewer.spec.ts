@@ -241,8 +241,8 @@ const clearMotionLog = (page: Page) =>
 test('Card cinematics fire on the matching action frames', async ({ page }) => {
   await installMotionRecorder(page);
   await routeApi(page);
-  // Use the synthetic demo (deterministic draw/play/attack frames), not the real
-  // recorded episode the Demo button now loads.
+  // Use the synthetic fixture (deterministic draw/play/attack frames), not the
+  // real recorded episode shown as the implicit sample.
   await page.goto('/?replayId=upload-cabt-match');
 
   await page.getByRole('button', { name: 'Pause replay' }).click();
@@ -260,7 +260,7 @@ test('Card cinematics fire on the matching action frames', async ({ page }) => {
   }
 
   const fx = await readMotionLog(page);
-  // Demo: draw on step 1, play-reveal on 3/5/7, attack on 6/8.
+  // Fixture: draw on step 1, play-reveal on 3/5/7, attack on 6/8.
   expect(fx.some((entry) => entry.cls === 'motion-ghost')).toBe(true);
   expect(fx.some((entry) => entry.cls === 'motion-reveal')).toBe(true);
   expect(fx.some((entry) => entry.cls === 'fx-impact')).toBe(true);
@@ -331,11 +331,12 @@ test('Reduced motion advances the board without moving cards', async ({ page }) 
   expect(['none', 'matrix(1, 0, 0, 1, 0, 0)']).toContain(attackerTransform);
 });
 
-test('Demo replay loads and advances with playback controls', async ({ page }) => {
+test('Implicit sample replay loads and advances with playback controls', async ({ page }) => {
   await routeApi(page);
   await page.goto('/');
 
   await expect(page.getByText('CABT Replay Viewer')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Demo' })).toHaveCount(0);
   await expect(page.getByTestId('game-status')).toContainText('Kazama Yusuke vs Leundai');
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
   await expect(page.getByLabel('Action step')).toHaveValue('0');
