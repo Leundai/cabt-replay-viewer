@@ -1,6 +1,8 @@
 import type { GameView } from '../lib/game/types';
 import type { ReplaySnapshot, ReplayStep } from '../lib/game/replay';
 import { getReplayArtifact } from '../lib/api/client';
+import { cabtReplayToSnapshot, createCabtReplayMetadata } from '../lib/cabt/cabtReplay';
+import { loadCabtGeneratedMetadata } from '../lib/cabt/cabtMetadata';
 import {
   DEFAULT_REPLAY_PLAYBACK_SPEED,
   REPLAY_PLAYBACK_SPEEDS,
@@ -222,10 +224,6 @@ async function loadCabtReplay(id: string): Promise<ReplaySnapshot> {
 }
 
 async function replayJsonToSnapshot(input: unknown): Promise<ReplaySnapshot> {
-  const [{ cabtReplayToSnapshot, createCabtReplayMetadata }, { loadCabtGeneratedMetadata }] = await Promise.all([
-    import('../lib/cabt/cabtReplay'),
-    import('../lib/cabt/cabtMetadata'),
-  ]);
   const metadata = await loadCabtGeneratedMetadata();
   return cabtReplayToSnapshot(input, createCabtReplayMetadata(metadata.cardRows, metadata.attackRows));
 }

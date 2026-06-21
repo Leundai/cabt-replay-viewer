@@ -34,6 +34,7 @@
 
   --surface-inset-bg: rgba(26, 31, 39, 0.04);
   --surface-inset-border: rgba(26, 31, 39, 0.08);
+  --surface-card-bg: rgba(255, 255, 255, 0.78);
 
   --surface-toolbar-bg: rgba(255, 255, 255, 0.82);
   --surface-toolbar-border: rgba(26, 31, 39, 0.08);
@@ -161,6 +162,7 @@
 
   --surface-inset-bg: rgba(255, 255, 255, 0.05);
   --surface-inset-border: rgba(255, 255, 255, 0.10);
+  --surface-card-bg: rgba(255, 255, 255, 0.075);
 
   --surface-toolbar-bg: rgba(12, 15, 19, 0.76);
   --surface-toolbar-border: rgba(255, 255, 255, 0.08);

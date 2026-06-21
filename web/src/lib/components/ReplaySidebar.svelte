@@ -359,12 +359,55 @@
     return submission.teamName || entry.teamName || `Submission #${submission.id}`;
   }
 
-  function formatEpisodeMeta(episode: KaggleEpisode): string {
+  function formatEpisodeMeta(episode: KaggleEpisode, submission: KaggleSubmission): string {
     return [
       `Episode ${episode.id}`,
-      episode.reward !== undefined && episode.reward !== null ? `Reward ${episode.reward}` : '',
+      episodeRewardValue(episode, submission) !== undefined ? `Reward ${episodeRewardValue(episode, submission)}` : '',
       episode.status,
       formatDate(episode.date),
+    ].filter(Boolean).join(' - ');
+  }
+
+  function episodeRewardValue(episode: KaggleEpisode, submission: KaggleSubmission): number | string | undefined {
+    const ownAgent = (episode.agents ?? []).find((agent) =>
+      (submission.id !== undefined && agent.submissionId === submission.id)
+      || (submission.teamId !== undefined && agent.teamId === submission.teamId));
+    return ownAgent?.reward ?? episode.reward ?? undefined;
+  }
+
+  function episodeOutcomeKind(episode: KaggleEpisode, submission: KaggleSubmission): 'win' | 'loss' | 'draw' | 'unknown' {
+    const reward = episodeRewardValue(episode, submission);
+    const numericReward = Number(reward);
+    if (!Number.isFinite(numericReward)) {
+      return 'unknown';
+    }
+    if (numericReward > 0) {
+      return 'win';
+    }
+    if (numericReward < 0) {
+      return 'loss';
+    }
+    return 'draw';
+  }
+
+  function episodeOutcomeLabel(episode: KaggleEpisode, submission: KaggleSubmission): string {
+    const kind = episodeOutcomeKind(episode, submission);
+    if (kind === 'win') {
+      return 'Win';
+    }
+    if (kind === 'loss') {
+      return 'Loss';
+    }
+    if (kind === 'draw') {
+      return 'Draw';
+    }
+    return 'Replay';
+  }
+
+  function formatEpisodePreview(episode: KaggleEpisode, submission: KaggleSubmission): string {
+    return [
+      episodeOutcomeLabel(episode, submission),
+      formatEpisodeMeta(episode, submission),
     ].filter(Boolean).join(' - ');
   }
 
@@ -499,16 +542,25 @@
                               disabled={leaderboardReplayLoadingId !== null}
                               onclick={() => openCachedLeaderboardEpisode(episode.id)}
                             >
-                              <span>{formatEpisodeMatchup(episode, submission, entry)}</span>
-                              <small>{leaderboardReplayLoadingId === episode.id ? 'Opening...' : formatEpisodeMeta(episode)}</small>
+                              <span class="episode-pill-main">
+                                <span class="episode-matchup">{formatEpisodeMatchup(episode, submission, entry)}</span>
+                                <span class="episode-result" data-outcome={episodeOutcomeKind(episode, submission)}>
+                                  {episodeOutcomeLabel(episode, submission)}
+                                </span>
+                              </span>
+                              <small>{leaderboardReplayLoadingId === episode.id ? 'Opening...' : formatEpisodeMeta(episode, submission)}</small>
                             </button>
                           {/each}
                         </div>
                       {:else}
                         <details class="episode-picker">
                           <summary>
-                            <span>{replayCountLabel(submission.episodes.length)}</span>
-                            <small>{formatEpisodeMatchup(submission.episodes[0], submission, entry)}</small>
+                            <span class="episode-summary-copy">
+                              <span class="episode-count">{replayCountLabel(submission.episodes.length)}</span>
+                              <strong>{formatEpisodeMatchup(submission.episodes[0], submission, entry)}</strong>
+                              <small>{formatEpisodePreview(submission.episodes[0], submission)}</small>
+                            </span>
+                            <span class="episode-chevron" aria-hidden="true"></span>
                           </summary>
                           <div class="leaderboard-episodes">
                             {#each submission.episodes as episode}
@@ -518,8 +570,13 @@
                                 disabled={leaderboardReplayLoadingId !== null}
                                 onclick={() => openCachedLeaderboardEpisode(episode.id)}
                               >
-                                <span>{formatEpisodeMatchup(episode, submission, entry)}</span>
-                                <small>{leaderboardReplayLoadingId === episode.id ? 'Opening...' : formatEpisodeMeta(episode)}</small>
+                                <span class="episode-pill-main">
+                                  <span class="episode-matchup">{formatEpisodeMatchup(episode, submission, entry)}</span>
+                                  <span class="episode-result" data-outcome={episodeOutcomeKind(episode, submission)}>
+                                    {episodeOutcomeLabel(episode, submission)}
+                                  </span>
+                                </span>
+                                <small>{leaderboardReplayLoadingId === episode.id ? 'Opening...' : formatEpisodeMeta(episode, submission)}</small>
                               </button>
                             {/each}
                           </div>
@@ -902,68 +959,163 @@
   .episode-picker {
     min-width: 0;
     display: grid;
-    gap: 6px;
+    gap: 7px;
   }
 
   .episode-picker summary {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: minmax(0, 1fr) 24px;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
-    padding: 6px 7px;
+    padding: 8px;
     border: 1px solid var(--button-border);
-    border-radius: 6px;
-    background: var(--button-bg);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
+      var(--button-bg);
     color: var(--button-text);
     cursor: pointer;
-    font-size: 11px;
-    font-weight: 850;
+    list-style: none;
+    transition:
+      border-color var(--transition-fast),
+      background var(--transition-fast),
+      box-shadow var(--transition-fast);
+  }
+
+  .episode-picker summary:hover {
+    border-color: var(--button-hover-border);
   }
 
   .episode-picker summary::-webkit-details-marker {
     display: none;
   }
 
-  .episode-picker summary span::before {
-    content: ">";
-    display: inline-block;
-    margin-right: 5px;
-    color: var(--text-secondary);
-    transition: transform 120ms ease;
+  .episode-picker[open] summary {
+    border-color: var(--accent-base);
+    background: var(--accent-tint);
+    box-shadow: inset 0 0 0 1px var(--accent-soft);
   }
 
-  .episode-picker[open] summary span::before {
-    transform: rotate(90deg);
+  .episode-summary-copy {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 9px;
+    row-gap: 2px;
+    align-items: center;
   }
 
-  .episode-picker summary small {
+  .episode-count {
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    min-width: 58px;
+    display: grid;
+    place-items: center;
+    padding: 3px 8px;
+    border: 1px solid var(--accent-soft);
+    border-radius: 7px;
+    background: var(--accent-tint);
+    color: var(--accent-strong);
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  .episode-summary-copy small {
     min-width: 0;
     overflow: hidden;
-    color: var(--text-secondary);
-    text-align: right;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .episode-summary-copy strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.18;
+  }
+
+  .episode-summary-copy small {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .episode-chevron {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--button-border);
+    border-radius: 999px;
+    background: var(--button-ghost-bg);
+    color: var(--text-secondary);
+    transition:
+      transform var(--dur-fast) var(--ease-out),
+      background var(--transition-fast),
+      border-color var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .episode-chevron::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  .episode-picker[open] .episode-chevron {
+    border-color: var(--accent-soft);
+    background: var(--button-bg);
+    color: var(--accent-strong);
+    transform: rotate(180deg);
   }
 
   .episode-pill {
     display: grid;
-    gap: 3px;
+    gap: 5px;
     min-width: 0;
     width: 100%;
-    min-height: 38px;
-    padding: 6px 7px;
+    min-height: 44px;
+    padding: 8px;
     border: 1px solid var(--button-border);
-    border-radius: 6px;
-    background: var(--button-bg);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent),
+      var(--surface-card-bg);
     color: var(--button-text);
     text-align: left;
-    font-size: 11px;
     font-weight: 850;
     line-height: 1.2;
+    transition:
+      border-color var(--transition-fast),
+      background var(--transition-fast),
+      box-shadow var(--transition-fast),
+      transform var(--dur-press) var(--ease-out);
   }
 
-  .episode-pill span,
+  .episode-pill:hover:not(:disabled) {
+    border-color: var(--button-hover-border);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  }
+
+  .episode-pill-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
   .episode-pill small {
     min-width: 0;
     overflow: hidden;
@@ -971,9 +1123,56 @@
     white-space: nowrap;
   }
 
+  .episode-matchup {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 11.5px;
+    font-weight: 900;
+    line-height: 1.22;
+  }
+
   .episode-pill small {
     color: var(--text-secondary);
+    font-size: 11px;
     font-weight: 750;
+  }
+
+  .episode-result {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 22px;
+    padding: 3px 7px;
+    border: 1px solid var(--button-border);
+    border-radius: 999px;
+    background: var(--button-ghost-bg);
+    color: var(--text-secondary);
+    font-size: 10.5px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .episode-result[data-outcome="win"] {
+    border-color: var(--accent-soft);
+    background: var(--accent-tint);
+    color: var(--accent-strong);
+  }
+
+  .episode-result[data-outcome="loss"] {
+    border-color: var(--danger-border);
+    background: var(--danger-bg);
+    color: var(--danger-strong);
+  }
+
+  .episode-result[data-outcome="draw"] {
+    border-color: var(--warning-base);
+    background: var(--warning-soft);
+    color: var(--warning-strong);
   }
 
   .replay-open,
