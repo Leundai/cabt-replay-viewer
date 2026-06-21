@@ -1,5 +1,6 @@
 <script lang="ts">
   import CardTile from './CardTile.svelte';
+  import { visiblePrizeSlots } from '../game/prizeZone';
   import type { PlayerView } from '../game/types';
 
   type Props = {
@@ -44,10 +45,6 @@
     return Array.from({ length: count }, (_, index) => count - index);
   }
 
-  function visiblePrizeCards(player: PlayerView) {
-    const count = Math.min(6, Math.max(0, player.prizes.length));
-    return Array.from({ length: count }, (_, index) => index);
-  }
 </script>
 
 <div class="center-stack">
@@ -68,11 +65,11 @@
       </button>
       <div class="prize-stack" title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`} data-testid={`prize-stack-${topPlayer.index}`}>
         <div class="prize-grid" aria-hidden="true">
-          {#each visiblePrizeCards(topPlayer) as index}
+          {#each visiblePrizeSlots(topPlayer.prizes) as index}
             <span class="prize-card" data-testid={`prize-card-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
           {/each}
         </div>
-        <span class="prize-count">{topPlayer.prizes.length}</span>
+        <span class="prize-count">{topPlayer.prizes.remaining}</span>
       </div>
     </div>
     <div class="right-field">
@@ -121,11 +118,11 @@
       </button>
       <div class="prize-stack" title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`} data-testid={`prize-stack-${bottomPlayer.index}`}>
         <div class="prize-grid" aria-hidden="true">
-          {#each visiblePrizeCards(bottomPlayer) as index}
+          {#each visiblePrizeSlots(bottomPlayer.prizes) as index}
             <span class="prize-card" data-testid={`prize-card-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
           {/each}
         </div>
-        <span class="prize-count">{bottomPlayer.prizes.length}</span>
+        <span class="prize-count">{bottomPlayer.prizes.remaining}</span>
       </div>
     </div>
     <div class="right-field">

@@ -46,6 +46,12 @@ export type PokemonSlotView = {
   specialConditions: string[];
 };
 
+export type PrizeZoneView = {
+  cards: CardView[];
+  remaining: number;
+  setup: boolean;
+};
+
 export type PlayerView = {
   index: number;
   id: number;
@@ -56,7 +62,7 @@ export type PlayerView = {
   lostZone: CardView[];
   stadium: CardView[];
   playZone: CardView[];
-  prizes: CardView[];
+  prizes: PrizeZoneView;
   active: PokemonSlotView;
   bench: PokemonSlotView[];
 };

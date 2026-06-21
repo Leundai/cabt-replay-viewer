@@ -1,8 +1,12 @@
-import { cardsForPokemonSlot, pokemonSlotTitle } from '../lib/game/slotCards';
-import type { CardView, GameView, PlayerView, PokemonSlotView } from '../lib/game/types';
+import {
+  cardsForPokemonSlot,
+  resolveSlotSelection,
+  slotInspectionTitle,
+  type SlotSelection,
+} from '../lib/game/slotInspection';
+import type { CardView, GameView } from '../lib/game/types';
 
 export type ZoneName = 'discard' | 'lostZone' | 'stadium' | 'playZone';
-export type SlotName = PokemonSlotView['slot'];
 
 type OpenZone = {
   playerIndex: number;
@@ -11,10 +15,7 @@ type OpenZone = {
   faceDown?: boolean;
 };
 
-type OpenSlot = {
-  playerIndex: number;
-  slot: SlotName;
-  slotIndex: number;
+type OpenSlot = SlotSelection & {
   faceDown?: boolean;
 };
 
@@ -41,8 +42,8 @@ class ZoneViewerStore {
     this.openZone = { playerIndex, zone, title, faceDown };
   }
 
-  showSlot(playerIndex: number, slot: SlotName, slotIndex: number, faceDown = false) {
-    this.openZone = { playerIndex, slot, slotIndex, faceDown };
+  showSlot(selection: SlotSelection, faceDown = false) {
+    this.openZone = { ...selection, faceDown };
   }
 
   close() {
@@ -56,8 +57,8 @@ class ZoneViewerStore {
     if ('title' in this.openZone) {
       return this.openZone.title;
     }
-    const resolved = 'slotIndex' in this.openZone ? this.slotFor(game, this.openZone) : null;
-    return resolved ? pokemonSlotTitle(resolved.player, resolved.slot) : '';
+    const resolved = 'slotIndex' in this.openZone ? resolveSlotSelection(game, this.openZone) : null;
+    return resolved ? slotInspectionTitle(resolved.player, resolved.slot) : '';
   }
 
   cardsFor(game: GameView | null | undefined): CardView[] {
@@ -65,21 +66,12 @@ class ZoneViewerStore {
       return [];
     }
     if ('slotIndex' in this.openZone) {
-      const resolved = this.slotFor(game, this.openZone);
+      const resolved = resolveSlotSelection(game, this.openZone);
       return resolved ? cardsForPokemonSlot(resolved.slot) : [];
     }
     return game
       ? (game.players[this.openZone.playerIndex]?.[this.openZone.zone] ?? [])
       : [];
-  }
-
-  private slotFor(game: GameView | null | undefined, selection: OpenSlot): { player: PlayerView; slot: PokemonSlotView } | null {
-    const player = game?.players[selection.playerIndex];
-    if (!player) {
-      return null;
-    }
-    const slot = selection.slot === 'active' ? player.active : player.bench[selection.slotIndex];
-    return slot ? { player, slot } : null;
   }
 }
 

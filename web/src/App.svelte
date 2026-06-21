@@ -13,7 +13,7 @@
   import ReplayTimeline from './lib/components/ReplayTimeline.svelte';
   import TableShell from './lib/components/TableShell.svelte';
   import ZoneViewer from './lib/components/ZoneViewer.svelte';
-  import { cardsForPokemonSlot } from './lib/game/slotCards';
+  import { canInspectSlot, slotSelectionFor } from './lib/game/slotInspection';
   import type { ZoneName } from './state/zoneViewer.svelte';
   import type { GameView, PlayerView, PokemonSlotView } from './lib/game/types';
   import type { ReplaySnapshot } from './lib/game/replay';
@@ -144,11 +144,10 @@
   }
 
   function showSlot(player: PlayerView, slot: PokemonSlotView) {
-    const cards = cardsForPokemonSlot(slot);
-    if (!cards.length) {
+    if (!canInspectSlot(slot)) {
       return;
     }
-    zoneViewerStore.showSlot(player.index, slot.slot, slot.index);
+    zoneViewerStore.showSlot(slotSelectionFor(player, slot));
   }
 
   async function closeReplay() {

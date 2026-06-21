@@ -6,6 +6,7 @@ import {
   planEligibility,
   type RawLog,
 } from './cardMotionModel';
+import { prizeZone } from '../lib/game/prizeZone';
 import { replayMotionBudgetMs } from './replayPlaybackModel';
 
 function card(id: number, name = `Card ${id}`, overrides: Partial<CardView> = {}): CardView {
@@ -40,7 +41,7 @@ function player(index: number, overrides: Partial<PlayerView> = {}): PlayerView 
     lostZone: [],
     stadium: [],
     playZone: [],
-    prizes: Array.from({ length: 6 }, () => card(900, 'Prize')),
+    prizes: prizeZone(Array.from({ length: 6 }, () => card(900, 'Prize')), true),
     active: slot(index, 'active', 0, card(100 + index, `Active ${index}`)),
     bench: [slot(index, 'bench', 0), slot(index, 'bench', 1)],
     ...overrides,

@@ -3,6 +3,7 @@
   import CardTile from './CardTile.svelte';
   import { safeCardImageUrl } from '../game/cardImages';
   import { energyIconSrc, pokemonTypeIconSrc, pokemonTypeLabelFor } from '../game/energyIcons';
+  import { canInspectSlot, slotInspectionLabel } from '../game/slotInspection';
   import type { PokemonSlotView } from '../game/types';
   import { cardSwap, pop, EASE_IN_OUT, EASE_OUT } from '../motion';
   import { applyEffectVars } from '../motionEffects';
@@ -73,7 +74,7 @@
   // not pop into place before the cinematic lands. The store seeds this in the
   // same flush as the snapshot, so there is never a one-frame flash.
   let incoming = $derived(cardMotionStore.isSuppressed(slotKeyValue));
-  let clickable = $derived(!!onclick && !slot.empty);
+  let clickable = $derived(!!onclick && canInspectSlot(slot));
   // Seed from the live batch so a remount doesn't replay an in-flight batch.
   let appliedBatchId = cardMotionStore.batch?.batchId ?? 0;
   let activeAnims: Animation[] = [];
@@ -254,7 +255,7 @@
   data-owner-index={slot.ownerIndex}
   data-slot-kind={slot.slot}
   data-slot-index={slot.index}
-  aria-label={clickable && slot.pokemon ? `View ${slot.pokemon.fullName || slot.pokemon.name}` : undefined}
+  aria-label={clickable ? slotInspectionLabel(slot) : undefined}
   title={slot.pokemon?.fullName ?? (slot.slot === 'active' ? 'Active' : `Bench ${slot.index + 1}`)}
   disabled={!clickable}
   onclick={clickable ? onclick : undefined}

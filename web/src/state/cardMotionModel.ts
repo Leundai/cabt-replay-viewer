@@ -114,7 +114,7 @@ function findCardById(player: PlayerView, cardId: number): CardView | null {
     ...player.discard,
     ...player.lostZone,
     ...player.stadium,
-    ...player.prizes,
+    ...player.prizes.cards,
   ];
   for (const slot of [player.active, ...player.bench]) {
     if (slot?.pokemon) flat.push(slot.pokemon);

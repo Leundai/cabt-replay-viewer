@@ -2,6 +2,7 @@
   import ActiveDuel from './ActiveDuel.svelte';
   import BenchZone from './BenchZone.svelte';
   import CenterPiles from './CenterPiles.svelte';
+  import { playmatGeometryStyle } from '../game/boardGeometry';
   import type { CardView, PlayerView, PokemonSlotView } from '../game/types';
 
   type ZoneName = 'discard' | 'lostZone' | 'stadium' | 'playZone';
@@ -85,12 +86,12 @@
     projectedHoverPile = projectedPiles().find(([, element]) => containsPoint(element, event))?.[0] ?? '';
   }
 
-  let boardPerspectiveStyle = $derived([
-    `--board-tilt: ${boardTilt}deg`,
-    `--board-perspective: ${boardPerspective}px`,
-    `--board-scale-y: ${boardScaleY / 100}`,
-    `--board-lift: ${boardLift}px`,
-  ].join('; '));
+  let boardGeometryStyle = $derived(playmatGeometryStyle({
+    boardTilt,
+    boardPerspective,
+    boardScaleY,
+    boardLift,
+  }));
 
   function clickBoardSurface(event: MouseEvent) {
     if (clickProjectedPile(event)) {
@@ -110,7 +111,7 @@
   <section
     class="playmat"
     class:has-projected-pile-hover={projectedHoverPile !== ''}
-  style={boardPerspectiveStyle}
+  style={boardGeometryStyle}
   role="presentation"
     onclick={clickBoardSurface}
     onmousemove={updateProjectedPileHover}
@@ -162,19 +163,6 @@
 
 <style>
   .playmat {
-    --active-preferred-w: calc(var(--board-card-w) * 1.48);
-    --active-fit-w: max(
-      calc(var(--board-card-w) * 1.15),
-      calc((var(--board-h) - (var(--bench-row-h) * 2) - (var(--board-row-gap) * 2) - var(--active-gap)) / 2.794)
-    );
-    --active-w: min(var(--active-preferred-w), var(--active-fit-w));
-    --active-h: calc(var(--active-w) * 1.397);
-    --pile-w: calc(var(--board-card-w) * 1.12);
-    --prize-card-w: calc(var(--board-card-w) * 0.9);
-    --prize-grid-w: calc(var(--prize-card-w) * 1.98);
-    --prize-grid-h: calc((var(--prize-card-w) * 1.397) + (var(--prize-card-w) * 1.42));
-    --side-field-w: min(max(var(--prize-grid-w), var(--pile-w)), calc(100cqw * 0.19));
-    --bench-gap: calc(var(--board-card-w) * 0.18);
     position: absolute;
     inset: var(--board-top-inset) var(--board-right-rail) var(--board-bottom-inset) 0;
     min-width: 0;
