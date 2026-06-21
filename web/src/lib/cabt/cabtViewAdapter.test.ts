@@ -68,6 +68,12 @@ describe('cabtStateToGameView', () => {
 
     expect(view.ready).toBe(true);
     expect(view.players[0].hand).toEqual([{ name: 'Card', fullName: 'Card' }, { name: 'Card', fullName: 'Card' }]);
+    expect(view.players[0].prizes).toEqual([
+      { name: 'Card', fullName: 'Card' },
+      { name: 'Card', fullName: 'Card' },
+      { name: 'Card', fullName: 'Card' },
+    ]);
+    expect(view.players[0].prizes).toHaveLength(3);
     expect(view.players[0].stadium.map((card) => card.name)).toEqual(['Shared Stadium']);
     expect(view.players[1].stadium.map((card) => card.name)).toEqual(['Owned Stadium']);
     expect(view.players[0].active.damage).toBe(30);

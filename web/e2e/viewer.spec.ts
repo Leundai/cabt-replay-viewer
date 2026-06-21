@@ -347,6 +347,83 @@ test('Implicit sample replay loads and advances with playback controls', async (
   await expect.poll(async () => Number(await step.inputValue())).toBeGreaterThanOrEqual(2);
 });
 
+test('Prize cards render as visible face-down cards', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/?replayId=upload-cabt-match');
+  await page.getByRole('button', { name: 'Pause replay' }).click();
+  await page.getByLabel('Action step').fill('6');
+
+  await expect(page.getByTestId('prize-stack-0')).toBeVisible();
+  await expect(page.getByTestId('prize-stack-1')).toBeVisible();
+  await expect(page.locator('[data-testid^="prize-card-0-"]')).toHaveCount(6);
+  await expect(page.locator('[data-testid^="prize-card-1-"]')).toHaveCount(6);
+});
+
+test('Opponent bench Pokemon opens the slot viewer', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/?replayId=upload-cabt-match');
+
+  await page.getByRole('button', { name: 'Pause replay' }).click();
+  await page.getByLabel('Action step').fill('3');
+  await page.getByRole('button', { name: /View Hydrapple ex/ }).click();
+
+  const slotViewer = page.getByRole('region', { name: /Bench 1/ });
+  await expect(slotViewer).toBeVisible();
+  await expect(slotViewer.getByText('1 card')).toBeVisible();
+  await expect(slotViewer.getByRole('img', { name: 'Hydrapple ex' })).toBeVisible();
+
+  await page.getByLabel('Action step').fill('2');
+  await expect(slotViewer.getByText('0 cards')).toBeVisible();
+  await expect(slotViewer.getByText('Empty')).toBeVisible();
+});
+
+async function inspectBoardContainment(page: Page) {
+  return page.evaluate(() => {
+    const plane = document.querySelector('.game-board-plane')?.getBoundingClientRect();
+    if (!plane) {
+      return ['missing game board plane'];
+    }
+    const specs = [
+      { selector: '.game-board-plane .board-slot', minWidth: 24, minHeight: 32 },
+      { selector: '.game-board-plane .stack-pile', minWidth: 18, minHeight: 18 },
+      { selector: '.game-board-plane .prize-card', minWidth: 12, minHeight: 16 },
+    ];
+    return specs.flatMap(({ selector, minWidth, minHeight }) =>
+      [...document.querySelectorAll(selector)].flatMap((node) => {
+        const rect = node.getBoundingClientRect();
+        if (rect.width < minWidth || rect.height < minHeight) {
+          return [`${selector} collapsed ${Math.round(rect.width)}x${Math.round(rect.height)}`];
+        }
+        const tolerance = 8;
+        const outside =
+          rect.left < plane.left - tolerance ||
+          rect.right > plane.right + tolerance ||
+          rect.top < plane.top - tolerance ||
+          rect.bottom > plane.bottom + tolerance;
+        return outside ? [`${selector} ${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.right)},${Math.round(rect.bottom)}`] : [];
+      }),
+    );
+  });
+}
+
+test('Board pieces stay inside the playmat on constrained viewports', async ({ page }) => {
+  await routeApi(page);
+
+  for (const viewport of [
+    { width: 1000, height: 620 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto('/?replayId=upload-cabt-match');
+    await page.getByRole('button', { name: 'Pause replay' }).click();
+    await page.getByLabel('Action step').fill('6');
+    await expect(page.locator('.game-board-plane')).toBeVisible();
+
+    const overflow = await inspectBoardContainment(page);
+    expect(overflow, `${viewport.width}x${viewport.height}`).toEqual([]);
+  }
+});
+
 test('Downloaded JSON can be imported and appears in the saved replay library', async ({ page }) => {
   await routeApi(page);
   await page.goto('/');

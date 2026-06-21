@@ -40,7 +40,7 @@ function player(index: number, overrides: Partial<PlayerView> = {}): PlayerView 
     lostZone: [],
     stadium: [],
     playZone: [],
-    prizesLeft: 6,
+    prizes: Array.from({ length: 6 }, () => card(900, 'Prize')),
     active: slot(index, 'active', 0, card(100 + index, `Active ${index}`)),
     bench: [slot(index, 'bench', 0), slot(index, 'bench', 1)],
     ...overrides,

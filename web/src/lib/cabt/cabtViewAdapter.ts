@@ -210,6 +210,9 @@ function buildPlayerView(
 ): PlayerView {
   const hand = player.hand ?? [];
   const bench = player.bench ?? [];
+  const prizes = (player.prize ?? []).map((cardRef) =>
+    cardRef ? options.cardCatalog.cardToView(cardRef) : faceDownCard(),
+  );
   return {
     index,
     id: index,
@@ -222,7 +225,7 @@ function buildPlayerView(
     lostZone: [],
     stadium: stadiumForPlayer(options.current?.stadium ?? [], index).map(options.cardCatalog.cardToView),
     playZone: [],
-    prizesLeft: player.prize?.length ?? 0,
+    prizes,
     active: pokemonToSlot(player.active?.[0] ?? null, index, 'active', 0, player, options.cardCatalog),
     bench: Array.from({ length: Math.max(player.benchMax ?? 5, bench.length) }, (_item, benchIndex) =>
       pokemonToSlot(bench[benchIndex] ?? null, index, 'bench', benchIndex, player, options.cardCatalog),

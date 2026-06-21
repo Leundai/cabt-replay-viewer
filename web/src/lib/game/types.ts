@@ -56,7 +56,7 @@ export type PlayerView = {
   lostZone: CardView[];
   stadium: CardView[];
   playZone: CardView[];
-  prizesLeft: number;
+  prizes: CardView[];
   active: PokemonSlotView;
   bench: PokemonSlotView[];
 };

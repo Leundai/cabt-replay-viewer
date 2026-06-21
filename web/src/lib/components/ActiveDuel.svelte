@@ -13,6 +13,7 @@
     currentStadium?: CardView;
     currentStadiumOwner?: PlayerView;
     showZone: (playerIndex: number, zone: ZoneName, title: string, faceDown?: boolean) => void;
+    showSlot: (player: PlayerView, slot: PokemonSlotView) => void;
   };
 
   let {
@@ -23,6 +24,7 @@
     currentStadium,
     currentStadiumOwner,
     showZone,
+    showSlot,
   }: Props = $props();
 </script>
 
@@ -31,6 +33,7 @@
     slot={topActiveSlot}
     active
     placement="top-active-slot"
+    onclick={() => showSlot(topPlayer, topActiveSlot)}
   />
 
   {#if currentStadium && currentStadiumOwner?.index === topPlayer.index}
@@ -41,6 +44,7 @@
     slot={bottomActiveSlot}
     active
     placement="bottom-active-slot"
+    onclick={() => showSlot(bottomPlayer, bottomActiveSlot)}
   />
 
   {#if currentStadium && currentStadiumOwner?.index === bottomPlayer.index}
@@ -114,11 +118,5 @@
     inset: auto auto 0 0;
     align-items: start;
     justify-items: start;
-  }
-
-  @media (max-width: 980px) {
-    .active-duel {
-      grid-template-rows: var(--active-w) minmax(58px, auto) var(--active-w);
-    }
   }
 </style>

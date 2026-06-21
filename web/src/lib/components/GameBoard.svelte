@@ -16,6 +16,7 @@
     currentStadium?: CardView;
     currentStadiumOwner?: PlayerView;
     showZone: (playerIndex: number, zone: ZoneName, title: string, faceDown?: boolean) => void;
+    showSlot: (player: PlayerView, slot: PokemonSlotView) => void;
     boardTilt?: number;
     boardPerspective?: number;
     boardScaleY?: number;
@@ -32,6 +33,7 @@
     currentStadium,
     currentStadiumOwner,
     showZone,
+    showSlot,
     boardTilt = 8,
     boardPerspective = 1250,
     boardScaleY = 98,
@@ -122,6 +124,7 @@
       player={topPlayer}
       slots={topBenchSlots}
       opponent
+      {showSlot}
     />
 
     <CenterPiles
@@ -145,11 +148,13 @@
       {currentStadium}
       {currentStadiumOwner}
       {showZone}
+      {showSlot}
     />
 
     <BenchZone
       player={bottomPlayer}
       slots={bottomBenchSlots}
+      {showSlot}
     />
   </div>
 
@@ -164,11 +169,11 @@
     );
     --active-w: min(var(--active-preferred-w), var(--active-fit-w));
     --active-h: calc(var(--active-w) * 1.397);
-    --pile-w: calc(var(--board-card-w) * 1.28);
-    --prize-card-w: calc(var(--board-card-w) * 0.96);
+    --pile-w: calc(var(--board-card-w) * 1.12);
+    --prize-card-w: calc(var(--board-card-w) * 0.9);
     --prize-grid-w: calc(var(--prize-card-w) * 1.98);
     --prize-grid-h: calc((var(--prize-card-w) * 1.397) + (var(--prize-card-w) * 1.42));
-    --side-field-w: max(var(--prize-grid-w), var(--pile-w));
+    --side-field-w: min(max(var(--prize-grid-w), var(--pile-w)), calc(100cqw * 0.19));
     --bench-gap: calc(var(--board-card-w) * 0.18);
     position: absolute;
     inset: var(--board-top-inset) var(--board-right-rail) var(--board-bottom-inset) 0;
@@ -176,6 +181,7 @@
     perspective: var(--board-perspective, 1250px);
     perspective-origin: 50% 68%;
     transform-style: preserve-3d;
+    pointer-events: none;
   }
 
   .playmat.has-projected-pile-hover {
@@ -197,9 +203,9 @@
       "battle-left battle battle-right"
       "bottom-left bottom-bench bottom-right";
     grid-template-columns:
-      minmax(var(--side-field-w), calc(var(--side-field-w) + (var(--board-card-w) * 0.42)))
+      minmax(0, calc(var(--side-field-w) + (var(--board-card-w) * 0.24)))
       minmax(0, 1fr)
-      minmax(var(--side-field-w), calc(var(--side-field-w) + (var(--board-card-w) * 0.42)));
+      minmax(0, calc(var(--side-field-w) + (var(--board-card-w) * 0.24)));
     grid-template-rows:
       var(--bench-row-h)
       minmax(calc((var(--active-h) * 2) + var(--active-gap)), 1fr)
@@ -214,6 +220,7 @@
     transform-origin: 50% 58%;
     transform-style: preserve-3d;
     will-change: transform;
+    pointer-events: none;
   }
 
   :global(.debug-zones) .game-board-plane {

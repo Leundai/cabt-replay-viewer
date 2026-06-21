@@ -10,6 +10,7 @@
     draggable?: boolean;
     disabled?: boolean;
     interactive?: boolean;
+    inspectable?: boolean;
     faceDown?: boolean;
     playable?: boolean;
     testId?: string;
@@ -25,6 +26,7 @@
     draggable = false,
     disabled = false,
     interactive = false,
+    inspectable = true,
     faceDown = false,
     playable = false,
     testId = '',
@@ -48,7 +50,7 @@
         : card
           ? 'pokemon'
           : 'empty');
-  let canInspect = $derived(!!card && !faceDown);
+  let canInspect = $derived(inspectable && !!card && !faceDown);
   // When the card has no play action of its own (the replay-mode default), the
   // whole face becomes the inspect target — clicking anywhere opens the preview
   // instead of hunting for a tiny hover-only magnifier.

@@ -16,7 +16,7 @@
   .board {
     position: relative;
     min-height: 0;
-    height: 100vh;
+    height: 100dvh;
     display: block;
   }
 

@@ -44,8 +44,8 @@
     return Array.from({ length: count }, (_, index) => count - index);
   }
 
-  function visiblePrizeCards(prizesLeft: number) {
-    const count = Math.min(6, Math.max(0, Math.round(prizesLeft)));
+  function visiblePrizeCards(player: PlayerView) {
+    const count = Math.min(6, Math.max(0, player.prizes.length));
     return Array.from({ length: count }, (_, index) => index);
   }
 </script>
@@ -66,10 +66,13 @@
         {/if}
         <span class="pile-count">{topPlayer.lostZone.length}</span>
       </button>
-      <div class="prize-grid" title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`}>
-        {#each visiblePrizeCards(topPlayer.prizesLeft) as index}
-          <span style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
-        {/each}
+      <div class="prize-stack" title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`} data-testid={`prize-stack-${topPlayer.index}`}>
+        <div class="prize-grid" aria-hidden="true">
+          {#each visiblePrizeCards(topPlayer) as index}
+            <span class="prize-card" data-testid={`prize-card-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+          {/each}
+        </div>
+        <span class="prize-count">{topPlayer.prizes.length}</span>
       </div>
     </div>
     <div class="right-field">
@@ -116,10 +119,13 @@
         {/if}
         <span class="pile-count">{bottomPlayer.lostZone.length}</span>
       </button>
-      <div class="prize-grid" title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`}>
-        {#each visiblePrizeCards(bottomPlayer.prizesLeft) as index}
-          <span style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
-        {/each}
+      <div class="prize-stack" title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`} data-testid={`prize-stack-${bottomPlayer.index}`}>
+        <div class="prize-grid" aria-hidden="true">
+          {#each visiblePrizeCards(bottomPlayer) as index}
+            <span class="prize-card" data-testid={`prize-card-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+          {/each}
+        </div>
+        <span class="prize-count">{bottomPlayer.prizes.length}</span>
       </div>
     </div>
     <div class="right-field">
@@ -275,7 +281,8 @@
   }
 
   button.stack-pile {
-    pointer-events: none;
+    cursor: pointer;
+    pointer-events: auto;
   }
 
   .deck-pile {
@@ -401,31 +408,57 @@
     transform: rotate(-90deg);
   }
 
-  .prize-grid {
+  .prize-stack {
     position: relative;
+    display: grid;
+    place-items: center;
     width: calc(var(--prize-card-w) * 1.98);
     height: calc((var(--prize-card-w) * 1.397) + (var(--prize-card-w) * 1.42));
     pointer-events: none;
   }
 
-  :global(.debug-zones) .prize-grid {
+  :global(.debug-zones) .prize-stack {
     outline: 2px solid rgba(250, 204, 21, 0.9);
     outline-offset: 4px;
     background: rgba(250, 204, 21, 0.08);
   }
 
-  .prize-grid span {
+  .prize-grid {
+    position: absolute;
+    inset: 0;
+  }
+
+  .prize-card {
     position: absolute;
     left: calc(var(--col) * var(--prize-card-w) * 0.98);
     top: calc(var(--row) * var(--prize-card-w) * 0.71);
     width: var(--prize-card-w);
     aspect-ratio: 63 / 88;
     border-radius: 4px;
-    border: 1px solid var(--prize-border);
+    border: 1px solid color-mix(in srgb, var(--prize-border) 82%, white);
     background:
       var(--cardback-shade),
       url("/assets/cardback.png") center / cover no-repeat;
-    box-shadow: 0 3px 8px rgba(23, 30, 38, 0.16);
+    box-shadow:
+      0 3px 8px rgba(23, 30, 38, 0.22),
+      0 0 0 1px rgba(255, 255, 255, 0.18);
+  }
+
+  .prize-count {
+    position: relative;
+    z-index: 3;
+    min-width: calc(var(--prize-card-w) * 0.45);
+    min-height: calc(var(--prize-card-w) * 0.45);
+    display: grid;
+    place-items: center;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--pile-count-border);
+    background: var(--pile-count-bg);
+    color: var(--pile-count-text);
+    box-shadow: 0 3px 10px rgba(23, 30, 38, 0.18);
+    font-size: calc(var(--prize-card-w) * 0.22);
+    font-weight: 900;
   }
 
 </style>

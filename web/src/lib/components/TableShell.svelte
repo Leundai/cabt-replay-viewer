@@ -16,13 +16,12 @@
 
 <style>
   .table-shell {
-    --board-card-w: clamp(58px, min(8vw, 8.1vh), 104px);
+    --board-card-w: clamp(42px, min(7.2cqw, 7.2cqh), 96px);
     --card-w: var(--board-card-w);
-    --hand-card-w: min(clamp(96px, min(7.8vw, 14.5vh), 150px), calc(var(--board-card-w) * 1.55));
-    --min-table-width: 760px;
+    --hand-card-w: min(clamp(76px, min(9.2cqw, 13.5cqh), 138px), calc(var(--board-card-w) * 1.55));
     --board-row-gap: calc(var(--board-card-w) * 0.16);
     --active-gap: calc(var(--board-card-w) * 0.24);
-    --bench-card-w: calc(var(--board-card-w) * 1.24);
+    --bench-card-w: calc(var(--board-card-w) * 1.18);
     --bench-row-h: calc(var(--bench-card-w) * 1.42);
     --opponent-hand-height: clamp(58px, 7.2vh, 84px);
     --replay-dock-h: 0px;
@@ -34,8 +33,8 @@
     --board-bottom-inset: calc((var(--hand-card-w) * 1.397) + (var(--hand-hover-pad) * 2.5) + 14px + var(--replay-dock-h));
     /* Cinema HUD reclaims the old right-side panel column — chrome is now a small
        top-right gear popover and a full-width dock, so the board uses the width. */
-    --board-right-rail: 20px;
-    --table-side-gap: 14px;
+    --board-right-rail: clamp(8px, 1.6cqw, 20px);
+    --table-side-gap: clamp(6px, 1.6cqw, 14px);
     --player-panel-right: calc(var(--board-right-rail) + 8px);
     --board-h: calc(100vh - var(--board-top-inset) - var(--board-bottom-inset));
     --board-edge-pad: calc(var(--board-card-w) * 0.32);
@@ -44,9 +43,9 @@
     --board-edge-pad-x: var(--board-edge-pad);
     --board-content-inset-y: calc(var(--board-outline-pad-y) + var(--board-content-pad));
     --board-content-inset-x: calc(var(--board-edge-pad-x) + var(--board-content-pad));
-    width: max(100vw, var(--min-table-width));
-    min-width: var(--min-table-width);
-    min-height: 100vh;
+    width: 100%;
+    min-width: 0;
+    min-height: 100dvh;
     position: relative;
     overflow: hidden;
     padding: 0;

@@ -63,24 +63,17 @@
     return typeof card?.hp === 'number' && Number.isFinite(card.hp) ? card.hp : 0;
   }
 
-  function activateFromKeyboard(event: KeyboardEvent) {
-    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) {
-      return;
-    }
-    event.preventDefault();
-    onclick?.(event as unknown as MouseEvent);
-  }
-
   // --- Attack cinematic: a real-element lunge/recoil driven by the motion store.
   // We animate the inner `.slot-card` (resting transform is `none`), never the
   // wrapper (translateZ) or `.card-tile` (the top player's 180deg rotation), so
   // WAAPI cancel always leaves the node clean.
-  let slotRoot = $state<HTMLDivElement>();
+  let slotRoot = $state<HTMLButtonElement>();
   let slotKeyValue = $derived(`slot-${slot.ownerIndex}-${slot.slot}-${slot.index}`);
   // While a play-clone is flying toward this slot, hide the real card so it does
   // not pop into place before the cinematic lands. The store seeds this in the
   // same flush as the snapshot, so there is never a one-frame flash.
   let incoming = $derived(cardMotionStore.isSuppressed(slotKeyValue));
+  let clickable = $derived(!!onclick && !slot.empty);
   // Seed from the live batch so a remount doesn't replay an in-flight batch.
   let appliedBatchId = cardMotionStore.batch?.batchId ?? 0;
   let activeAnims: Animation[] = [];
@@ -249,26 +242,27 @@
   onDestroy(clearAttackFx);
 </script>
 
-<div
+<button
+  type="button"
   bind:this={slotRoot}
-  role="button"
-  tabindex="0"
   class:active
   class:empty={slot.empty}
+  class:clickable
   class:motion-incoming={incoming}
   class={`board-slot ${placement}`}
   data-testid={`slot-${slot.ownerIndex}-${slot.slot}-${slot.index}`}
   data-owner-index={slot.ownerIndex}
   data-slot-kind={slot.slot}
   data-slot-index={slot.index}
+  aria-label={clickable && slot.pokemon ? `View ${slot.pokemon.fullName || slot.pokemon.name}` : undefined}
   title={slot.pokemon?.fullName ?? (slot.slot === 'active' ? 'Active' : `Bench ${slot.index + 1}`)}
-  {onclick}
-  onkeydown={activateFromKeyboard}
+  disabled={!clickable}
+  onclick={clickable ? onclick : undefined}
 >
   {#if slot.pokemon}
     {#key slot.pokemon.fullName}
       <div class="slot-card" in:cardSwap out:cardSwap>
-        <CardTile card={slot.pokemon} />
+        <CardTile card={slot.pokemon} inspectable={false} />
       </div>
     {/key}
     {#if slot.damage > 0}
@@ -335,11 +329,12 @@
   {:else}
     <div class="empty-zone"></div>
   {/if}
-</div>
+</button>
 
 <style>
   .board-slot {
-    --slot-card-w: var(--card-w);
+    --slot-card-w: 100cqw;
+    container-type: inline-size;
     position: relative;
     width: var(--card-w);
     min-width: 0;
@@ -350,6 +345,9 @@
     background: transparent;
     box-shadow: none;
     display: block;
+    appearance: none;
+    color: inherit;
+    font: inherit;
     transition:
       background var(--transition-fast),
       box-shadow var(--transition-fast),
@@ -363,13 +361,26 @@
   }
 
   .board-slot.active {
-    --slot-card-w: var(--active-w);
     width: var(--active-w);
+  }
+
+  .board-slot:disabled {
+    cursor: default;
   }
 
   .board-slot.empty {
     border: 1px dashed var(--slot-empty-border);
     background: var(--slot-empty-bg);
+  }
+
+  .board-slot.clickable {
+    cursor: zoom-in;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .board-slot.clickable:not(.empty):hover {
+      filter: saturate(1.05);
+    }
   }
 
   /* Card + its badges stay laid out (so the clone has a target box) but are

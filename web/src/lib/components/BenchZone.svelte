@@ -6,20 +6,22 @@
     player: PlayerView;
     slots?: PokemonSlotView[];
     opponent?: boolean;
+    showSlot: (player: PlayerView, slot: PokemonSlotView) => void;
   };
 
   let {
     player,
     slots = [],
     opponent = false,
+    showSlot,
   }: Props = $props();
 </script>
 
-<div class="bench-zone" class:opponent class:empty={slots.length === 0}>
+<div class="bench-zone" class:opponent class:empty={slots.length === 0} style={`--bench-slot-count: ${Math.max(slots.length, 1)};`}>
   <div class="bench-debug-surface" aria-hidden="true"></div>
   <div class="bench-row" class:opponent>
     {#each slots as slot}
-      <BoardSlot {slot} />
+      <BoardSlot {slot} onclick={() => showSlot(player, slot)} />
     {/each}
   </div>
 </div>
@@ -97,8 +99,10 @@
   }
 
   .bench-row :global(.board-slot) {
-    --slot-card-w: var(--bench-card-w);
     width: var(--bench-card-w);
+    min-width: 32px;
+    max-width: var(--bench-card-w);
+    flex: 0 1 var(--bench-card-w);
     pointer-events: auto;
   }
 

@@ -13,8 +13,9 @@
   import ReplayTimeline from './lib/components/ReplayTimeline.svelte';
   import TableShell from './lib/components/TableShell.svelte';
   import ZoneViewer from './lib/components/ZoneViewer.svelte';
+  import { cardsForPokemonSlot } from './lib/game/slotCards';
   import type { ZoneName } from './state/zoneViewer.svelte';
-  import type { GameView } from './lib/game/types';
+  import type { GameView, PlayerView, PokemonSlotView } from './lib/game/types';
   import type { ReplaySnapshot } from './lib/game/replay';
   import { cardInspectorStore } from './state/cardInspector.svelte';
   import { cardMotionStore } from './state/cardMotion.svelte';
@@ -33,6 +34,7 @@
   let currentStadiumOwner = $derived(game?.players.find((player) => player.stadium.length));
   let activePlayer = $derived(game?.players[game.activePlayerIndex]);
   let viewedCards = $derived(zoneViewerStore.cardsFor(game));
+  let zoneViewerTitle = $derived(zoneViewerStore.titleFor(game));
   let zoneViewerIsStadium = $derived(zoneViewerStore.zone === 'stadium');
   let statusLabel = $derived(replayStore.loading ? 'Loading replay' : replayStore.error);
   let replayMatchupLabel = $derived(formatReplayMatchup(replay));
@@ -139,6 +141,14 @@
 
   function showZone(playerIndex: number, zone: ZoneName, title: string, faceDown = false) {
     zoneViewerStore.show(playerIndex, zone, title, faceDown);
+  }
+
+  function showSlot(player: PlayerView, slot: PokemonSlotView) {
+    const cards = cardsForPokemonSlot(slot);
+    if (!cards.length) {
+      return;
+    }
+    zoneViewerStore.showSlot(player.index, slot.slot, slot.index);
   }
 
   async function closeReplay() {
@@ -283,6 +293,7 @@
             {currentStadium}
             {currentStadiumOwner}
             {showZone}
+            {showSlot}
             boardTilt={viewSettingsStore.boardTilt}
             boardPerspective={viewSettingsStore.boardPerspective}
             boardScaleY={viewSettingsStore.boardScaleY}
@@ -302,7 +313,7 @@
 
           <ZoneViewer
             open={zoneViewerStore.open}
-            title={zoneViewerStore.title}
+            title={zoneViewerTitle}
             cards={viewedCards}
             faceDown={zoneViewerStore.faceDown}
             actionLabel={zoneViewerIsStadium && viewedCards.length ? 'Inspect stadium' : ''}
@@ -361,10 +372,11 @@
     height: 100%;
     position: relative;
     overflow: auto;
+    container-type: size;
   }
 
   .viewer-stage :global(.table-shell) {
-    width: max(100%, var(--min-table-width));
+    width: 100%;
   }
 
   /* Cinema HUD: a single settings gear at top-right. Everything that used to be
