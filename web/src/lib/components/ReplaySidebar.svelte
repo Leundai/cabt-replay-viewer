@@ -72,8 +72,8 @@
   onMount(() => {
     void refreshLibrary();
     void refreshKaggleStatus();
-    void refreshLeaderboard();
-    const leaderboardTimer = setInterval(() => void refreshLeaderboard(), 60_000);
+    void loadLeaderboard();
+    const leaderboardTimer = setInterval(() => void loadLeaderboard(), 60_000);
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyK') {
         event.preventDefault();
@@ -124,7 +124,7 @@
     }
   }
 
-  async function refreshLeaderboard() {
+  async function loadLeaderboard() {
     leaderboardLoading = !leaderboard;
     leaderboardError = '';
     try {
@@ -496,8 +496,8 @@
   <section class="source-panel leaderboard-panel">
     <div class="panel-heading">
       <strong>Leaderboard</strong>
-      <button type="button" disabled={leaderboardLoading} onclick={refreshLeaderboard}>
-        {leaderboardLoading ? 'Refreshing' : 'Refresh'}
+      <button type="button" disabled={leaderboardLoading} onclick={loadLeaderboard}>
+        {leaderboardLoading ? 'Loading' : 'Reload'}
       </button>
     </div>
     <div class="cache-line">

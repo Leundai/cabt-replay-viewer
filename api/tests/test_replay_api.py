@@ -80,7 +80,7 @@ def test_admin_session_requires_token(monkeypatch):
     assert allowed.json()["ok"] is True
 
 
-def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
+def test_leaderboard_refresh_query_is_cached(tmp_path, monkeypatch):
     monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
     monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
     monkeypatch.setattr("api.app.main.settings.kaggle_leaderboard_page_size", 2)
@@ -112,8 +112,8 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
     monkeypatch.setattr("api.app.main.kaggle.list_episodes", fake_list_episodes)
 
     client = TestClient(app)
-    first = client.get("/api/kaggle/leaderboard")
-    second = client.get("/api/kaggle/leaderboard")
+    first = client.get("/api/kaggle/leaderboard?refresh=true")
+    second = client.get("/api/kaggle/leaderboard?refresh=true")
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -125,6 +125,36 @@ def test_leaderboard_refresh_is_cached_for_public_reads(tmp_path, monkeypatch):
     assert calls == [("pokemon-tcg-ai-battle", 2)]
     assert submission_calls == [(123, "Alpha")]
     assert episode_calls == [111]
+
+
+def test_public_leaderboard_read_does_not_refresh_stale_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr("api.app.main.leaderboard_cache.root", tmp_path / "leaderboards")
+    monkeypatch.setattr("api.app.main.settings.kaggle_credentials", KaggleCredentials(mode="bearer", bearer_token="token"))
+    leaderboard_cache.save(
+        "pokemon-tcg-ai-battle",
+        [KaggleLeaderboardEntry(rank=1, teamId=123, teamName="Alpha", score="100.0")],
+        page_size=2,
+    )
+    path = tmp_path / "leaderboards" / "pokemon-tcg-ai-battle.json"
+    data = json.loads(path.read_text())
+    data["expiresAt"] = "2000-01-01T00:00:00+00:00"
+    path.write_text(json.dumps(data))
+    calls = []
+
+    async def fake_list_leaderboard(competition: str, page_size: int):
+        calls.append((competition, page_size))
+        return [KaggleLeaderboardEntry(rank=1, teamId=999, teamName="Fresh", score="200.0")], None
+
+    monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", fake_list_leaderboard)
+
+    client = TestClient(app)
+    response = client.get("/api/kaggle/leaderboard")
+
+    assert response.status_code == 200
+    assert response.json()["entries"][0]["teamName"] == "Alpha"
+    assert response.json()["source"] == "stale"
+    assert response.json()["stale"] is True
+    assert calls == []
 
 
 def test_leaderboard_enrichment_marks_ranked_submission_and_preserves_leaderboard_score(tmp_path, monkeypatch):
@@ -174,7 +204,7 @@ def test_leaderboard_enrichment_marks_ranked_submission_and_preserves_leaderboar
     monkeypatch.setattr("api.app.main.kaggle.list_episodes", fake_list_episodes)
 
     client = TestClient(app)
-    response = client.get("/api/kaggle/leaderboard")
+    response = client.get("/api/kaggle/leaderboard?refresh=true")
 
     assert response.status_code == 200
     entry = response.json()["entries"][0]
@@ -227,7 +257,7 @@ def test_leaderboard_enrichment_marks_only_one_timestamp_matched_submission(tmp_
     monkeypatch.setattr("api.app.main.kaggle.list_team_submissions", fake_list_team_submissions)
 
     client = TestClient(app)
-    response = client.get("/api/kaggle/leaderboard")
+    response = client.get("/api/kaggle/leaderboard?refresh=true")
 
     assert response.status_code == 200
     entry = response.json()["entries"][0]
@@ -256,7 +286,7 @@ def test_leaderboard_enrichment_failure_does_not_break_refresh(tmp_path, monkeyp
     monkeypatch.setattr("api.app.main.kaggle.list_team_submissions", broken_list_team_submissions)
 
     client = TestClient(app)
-    response = client.get("/api/kaggle/leaderboard")
+    response = client.get("/api/kaggle/leaderboard?refresh=true")
 
     assert response.status_code == 200
     assert response.json()["entries"][0]["teamName"] == "Alpha"
@@ -274,7 +304,7 @@ def test_leaderboard_refresh_failure_returns_empty_snapshot(tmp_path, monkeypatc
     monkeypatch.setattr("api.app.main.kaggle.list_leaderboard", broken_list_leaderboard)
 
     client = TestClient(app)
-    response = client.get("/api/kaggle/leaderboard")
+    response = client.get("/api/kaggle/leaderboard?refresh=true")
 
     assert response.status_code == 200
     assert response.json()["entries"] == []
@@ -302,7 +332,7 @@ def test_leaderboard_refresh_failure_returns_stale_snapshot(tmp_path, monkeypatc
     data = json.loads(path.read_text())
     data["expiresAt"] = "2000-01-01T00:00:00+00:00"
     path.write_text(json.dumps(data))
-    stale = client.get("/api/kaggle/leaderboard")
+    stale = client.get("/api/kaggle/leaderboard?refresh=true")
 
     assert stale.status_code == 200
     assert stale.json()["entries"][0]["teamName"] == "Alpha"

@@ -444,7 +444,7 @@ def kaggle_status() -> KaggleStatus:
 @app.get("/api/kaggle/leaderboard", response_model=KaggleLeaderboardSnapshot)
 async def kaggle_leaderboard(
     competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
-    refresh: bool = Query(True),
+    refresh: bool = Query(False),
 ) -> KaggleLeaderboardSnapshot:
     return await get_leaderboard_snapshot(competition, refresh_if_stale=refresh)
 

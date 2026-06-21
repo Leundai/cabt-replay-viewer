@@ -136,8 +136,8 @@ export async function verifyAdminSession(): Promise<void> {
   await apiJson<{ ok: boolean }>('/api/admin/session');
 }
 
-export async function getKaggleLeaderboard(competition: string): Promise<KaggleLeaderboardSnapshot> {
-  const params = new URLSearchParams({ competition });
+export async function getKaggleLeaderboard(competition: string, options: { refresh?: boolean } = {}): Promise<KaggleLeaderboardSnapshot> {
+  const params = new URLSearchParams({ competition, refresh: String(options.refresh ?? false) });
   return apiJson<KaggleLeaderboardSnapshot>(`/api/kaggle/leaderboard?${params}`);
 }
 
