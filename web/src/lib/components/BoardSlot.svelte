@@ -5,6 +5,7 @@
   import { energyIconSrc, pokemonTypeIconSrc, pokemonTypeLabelFor } from '../game/energyIcons';
   import type { PokemonSlotView } from '../game/types';
   import { cardSwap, pop, EASE_IN_OUT, EASE_OUT } from '../motion';
+  import { applyEffectVars } from '../motionEffects';
   import { cardMotionStore, type AttackIntent } from '../../state/cardMotion.svelte';
 
   type Props = {
@@ -101,7 +102,7 @@
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, w: rect.width, h: rect.height };
   }
 
-  function spawnImpact(defCenter: { x: number; y: number; w: number; h: number }, ux: number, uy: number, reduced: boolean) {
+  function spawnImpact(atk: AttackIntent, defCenter: { x: number; y: number; w: number; h: number }, ux: number, uy: number, reduced: boolean) {
     if (!slotRoot) {
       return;
     }
@@ -113,6 +114,7 @@
     spark.className = 'fx-impact';
     spark.style.left = `${contactX.toFixed(1)}px`;
     spark.style.top = `${contactY.toFixed(1)}px`;
+    applyEffectVars(spark, atk.effectKind);
     slotRoot.appendChild(spark);
     activeSpark = spark;
     const fromScale = reduced ? 1 : 0.9;
@@ -151,7 +153,7 @@
     const dy = uy * mag;
 
     if (isDefender) {
-      spawnImpact(d, ux, uy, reduced);
+      spawnImpact(atk, d, ux, uy, reduced);
     }
 
     if (reduced) {
@@ -415,13 +417,19 @@
     width: clamp(36px, calc(var(--slot-card-w) * 0.62), 96px);
     height: clamp(36px, calc(var(--slot-card-w) * 0.62), 96px);
     border-radius: 50%;
-    background: radial-gradient(
-      circle at 50% 50%,
-      rgba(255, 255, 255, 0.95) 0%,
-      rgba(255, 236, 155, 0.85) 26%,
-      rgba(255, 176, 61, 0.5) 48%,
-      rgba(255, 140, 40, 0) 72%
-    );
+    background:
+      var(--fx-sprite-impact) center / contain no-repeat,
+      radial-gradient(
+        circle at 50% 50%,
+        rgba(255, 255, 255, 0.95) 0%,
+        color-mix(in srgb, var(--fx-core, #ffe06a) 82%, white) 26%,
+        color-mix(in srgb, var(--fx-edge, #ff8c28) 72%, transparent) 48%,
+        rgba(255, 140, 40, 0) 72%
+      );
+    background-blend-mode: screen;
+    box-shadow:
+      0 0 20px var(--fx-glow, rgba(255, 176, 61, 0.5)),
+      0 0 42px var(--fx-haze, rgba(196, 48, 24, 0.24));
     mix-blend-mode: screen;
     transform: translate(-50%, -50%) scale(0.9);
     opacity: 0;

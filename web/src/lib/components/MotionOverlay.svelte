@@ -2,7 +2,8 @@
   import { onDestroy } from 'svelte';
   import { safeCardImageUrl } from '../game/cardImages';
   import { EASE_IN_OUT, EASE_OUT } from '../motion';
-  import { cardMotionStore, type DrawIntent, type PlayIntent } from '../../state/cardMotion.svelte';
+  import { applyEffectVars, attackEffectKind, type AttackEffectKind } from '../motionEffects';
+  import { cardMotionStore, type AttackIntent, type DrawIntent, type PlayIntent } from '../../state/cardMotion.svelte';
 
   // A FLAT overlay that covers the board. It deliberately does NOT inherit the
   // board plane's 3D tilt — clones read crisp and we sidestep Safari's
@@ -66,6 +67,166 @@
     };
   }
 
+  function trackChild(anim: Animation) {
+    activeAnims.push(anim);
+  }
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function lineFrame(start: Box, end: { cx: number; cy: number }, h: number, scaleX: number): string {
+    const angle = Math.atan2(end.cy - start.cy, end.cx - start.cx) * (180 / Math.PI);
+    return `translate(${start.cx.toFixed(2)}px, ${(start.cy - h / 2).toFixed(2)}px) rotate(${angle.toFixed(2)}deg) scaleX(${scaleX.toFixed(3)})`;
+  }
+
+  function lineLength(start: Box, end: { cx: number; cy: number }): number {
+    return Math.hypot(end.cx - start.cx, end.cy - start.cy);
+  }
+
+  function decorateReveal(node: HTMLElement, kind: AttackEffectKind, duration: number, reduced: boolean) {
+    applyEffectVars(node, kind);
+    if (reduced) {
+      return;
+    }
+
+    const glint = document.createElement('div');
+    glint.className = 'fx-card-glint';
+    node.appendChild(glint);
+    trackChild(
+      glint.animate(
+        [
+          { transform: 'translateX(-150%) rotate(18deg)', opacity: 0 },
+          { opacity: 0.82, offset: 0.38 },
+          { transform: 'translateX(150%) rotate(18deg)', opacity: 0 },
+        ],
+        { duration: Math.min(duration, 620), delay: 70, easing: EASE_OUT, fill: 'both' },
+      ),
+    );
+
+    const aura = document.createElement('div');
+    aura.className = 'fx-reveal-aura';
+    node.appendChild(aura);
+    trackChild(
+      aura.animate(
+        [
+          { transform: 'scale(0.84)', opacity: 0 },
+          { opacity: 0.72, offset: 0.3 },
+          { transform: 'scale(1.18)', opacity: 0 },
+        ],
+        { duration: Math.min(duration + 160, 760), easing: EASE_OUT, fill: 'both' },
+      ),
+    );
+  }
+
+  function runDrawTrail(start: Box, end: { cx: number; cy: number }, delay: number, duration: number) {
+    const length = lineLength(start, end);
+    const h = clamp(start.h * 0.16, 7, 22);
+    const trail = makeNode('fx-draw-trail', length, h);
+    trail.style.transformOrigin = '0 50%';
+    applyEffectVars(trail, 'colorless');
+    track(
+      trail.animate(
+        [
+          { transform: lineFrame(start, end, h, 0.05), opacity: 0, filter: 'blur(5px)' },
+          { opacity: 0.62, filter: 'blur(1px)', offset: 0.28 },
+          { transform: lineFrame(start, end, h, 1), opacity: 0, filter: 'blur(8px)' },
+        ],
+        { duration: Math.max(160, duration - 20), delay, easing: EASE_OUT, fill: 'backwards' },
+      ),
+      trail,
+    );
+  }
+
+  function runAttackFx(intent: AttackIntent, overlay: DOMRect, budgetMs: number, reduced: boolean) {
+    const attacker = boxFor(`[data-testid="${intent.attackerKey}"] .slot-card`, overlay);
+    const defender = boxFor(`[data-testid="${intent.defenderKey}"] .slot-card`, overlay);
+    if (!attacker || !defender) {
+      return;
+    }
+
+    const length = lineLength(attacker, defender);
+    const beamH = clamp(Math.min(attacker.w, defender.w) * 0.18, 12, 34);
+    const projectileSize = clamp(Math.min(attacker.w, defender.w) * 0.28, 20, 48);
+    const total = Math.min(budgetMs, reduced ? 220 : 520);
+
+    if (!reduced) {
+      const beam = makeNode('fx-attack-beam', length, beamH);
+      beam.style.transformOrigin = '0 50%';
+      applyEffectVars(beam, intent.effectKind);
+      track(
+        beam.animate(
+          [
+            { transform: lineFrame(attacker, defender, beamH, 0.08), opacity: 0, filter: 'blur(7px)' },
+            { opacity: 0.88, filter: 'blur(0.5px)', offset: 0.25 },
+            { transform: lineFrame(attacker, defender, beamH, 1), opacity: 0.2, filter: 'blur(1px)', offset: 0.72 },
+            { transform: lineFrame(attacker, defender, beamH, 1), opacity: 0, filter: 'blur(8px)' },
+          ],
+          { duration: total, easing: EASE_OUT, fill: 'backwards' },
+        ),
+        beam,
+      );
+
+      const projectile = makeNode('fx-projectile', projectileSize, projectileSize);
+      applyEffectVars(projectile, intent.effectKind);
+      track(
+        projectile.animate(
+          [
+            { transform: frame(attacker.cx, attacker.cy, projectileSize, projectileSize, 0.72), opacity: 0, filter: 'blur(4px)' },
+            { opacity: 1, filter: 'blur(0px)', offset: 0.16 },
+            { transform: frame(defender.cx, defender.cy, projectileSize, projectileSize, 1.08), opacity: 0.94, filter: 'blur(0px)', offset: 0.76 },
+            { transform: frame(defender.cx, defender.cy, projectileSize, projectileSize, 1.35), opacity: 0, filter: 'blur(6px)' },
+          ],
+          { duration: total, easing: EASE_IN_OUT, fill: 'backwards' },
+        ),
+        projectile,
+      );
+
+      const sparkCount = 9;
+      for (let i = 0; i < sparkCount; i += 1) {
+        const sparkSize = clamp(projectileSize * (0.13 + (i % 3) * 0.035), 4, 10);
+        const spark = makeNode('fx-spark', sparkSize, sparkSize);
+        applyEffectVars(spark, intent.effectKind);
+        const angle = -Math.PI * 0.86 + i * (Math.PI * 1.72) / (sparkCount - 1);
+        const distance = projectileSize * (0.58 + (i % 4) * 0.18);
+        const sx = defender.cx + Math.cos(angle) * distance;
+        const sy = defender.cy + Math.sin(angle) * distance;
+        track(
+          spark.animate(
+            [
+              { transform: frame(defender.cx, defender.cy, sparkSize, sparkSize, 0.9), opacity: 0 },
+              { opacity: 0.96, offset: 0.22 },
+              { transform: frame(sx, sy, sparkSize, sparkSize, 1.15), opacity: 0 },
+            ],
+            { duration: 260, delay: Math.min(260, total * 0.58), easing: EASE_OUT, fill: 'backwards' },
+          ),
+          spark,
+        );
+      }
+    }
+
+    const ringSize = clamp(Math.min(attacker.w, defender.w) * (reduced ? 0.92 : 1.12), 46, 150);
+    const ring = makeNode('fx-shockwave', ringSize, ringSize);
+    applyEffectVars(ring, intent.effectKind);
+    track(
+      ring.animate(
+        reduced
+          ? [
+              { transform: frame(defender.cx, defender.cy, ringSize, ringSize, 1), opacity: 0 },
+              { transform: frame(defender.cx, defender.cy, ringSize, ringSize, 1), opacity: 0.5, offset: 0.4 },
+              { transform: frame(defender.cx, defender.cy, ringSize, ringSize, 1), opacity: 0 },
+            ]
+          : [
+              { transform: frame(defender.cx, defender.cy, ringSize, ringSize, 0.58), opacity: 0 },
+              { opacity: 0.78, offset: 0.24 },
+              { transform: frame(defender.cx, defender.cy, ringSize, ringSize, 1.55), opacity: 0 },
+            ],
+        { duration: reduced ? 180 : 320, delay: reduced ? 0 : Math.min(230, total * 0.55), easing: EASE_OUT, fill: 'backwards' },
+      ),
+      ring,
+    );
+  }
+
   function runDraw(intent: DrawIntent, overlay: DOMRect, budgetMs: number, reduced: boolean) {
     const deck = boxFor(`[data-testid="deck-pile-${intent.ownerIndex}"]`, overlay);
     const hand = boxFor(`[data-testid="hand-${intent.ownerIndex}"]`, overlay);
@@ -91,6 +252,7 @@
       const targetX = hand.x + hand.w * (0.2 + 0.6 * t);
       const tilt = -4 + 8 * t;
       const node = makeNode('motion-ghost', cardW, cardH);
+      runDrawTrail(deck, { cx: targetX, cy: hand.cy }, i * stagger, duration);
       track(
         node.animate(
           [
@@ -142,6 +304,8 @@
     }
 
     const node = makeNode('motion-reveal', baseW, baseH);
+    const revealKind = attackEffectKind(intent.card?.cardType ?? intent.card?.energyType);
+    decorateReveal(node, revealKind, budgetMs, reduced);
     if (art) {
       const img = document.createElement('img');
       img.src = art;
@@ -219,7 +383,7 @@
     }
     appliedBatchId = id;
     clearMotionFx(); // a new batch (or a clear) interrupts in-flight ghosts
-    if (!batch || !overlayEl || batch.travels.length === 0) {
+    if (!batch || !overlayEl || (!batch.attack && batch.travels.length === 0)) {
       return;
     }
     const budgetMs = batch.budgetMs;
@@ -233,6 +397,9 @@
         return;
       }
       const overlay = overlayEl.getBoundingClientRect();
+      if (batch.attack) {
+        runAttackFx(batch.attack, overlay, budgetMs, reduced);
+      }
       for (const travel of batch.travels) {
         if (travel.kind === 'draw') {
           runDraw(travel, overlay, budgetMs, reduced);
@@ -262,12 +429,22 @@
   }
 
   .motion-overlay :global(.motion-ghost),
-  .motion-overlay :global(.motion-reveal) {
+  .motion-overlay :global(.motion-reveal),
+  .motion-overlay :global(.fx-draw-trail),
+  .motion-overlay :global(.fx-attack-beam),
+  .motion-overlay :global(.fx-projectile),
+  .motion-overlay :global(.fx-shockwave),
+  .motion-overlay :global(.fx-spark) {
     position: absolute;
     left: 0;
     top: 0;
     transform-origin: center;
     will-change: transform, opacity;
+    pointer-events: none;
+  }
+
+  .motion-overlay :global(.motion-ghost),
+  .motion-overlay :global(.motion-reveal) {
     border-radius: 6px;
   }
 
@@ -283,12 +460,16 @@
     place-items: center;
     overflow: hidden;
     background: #f7f8fa;
+    isolation: isolate;
     box-shadow:
       0 24px 60px rgba(12, 15, 19, 0.42),
+      0 0 28px var(--fx-glow, rgba(235, 184, 82, 0.34)),
       0 0 0 1px rgba(255, 255, 255, 0.5);
   }
 
   .motion-overlay :global(.motion-reveal img) {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
     object-fit: fill;
@@ -303,6 +484,8 @@
   }
 
   .motion-overlay :global(.reveal-fallback) {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
     display: grid;
@@ -326,5 +509,118 @@
     color: #66707c;
     font-size: 9px;
     font-weight: 800;
+  }
+
+  .motion-overlay :global(.fx-card-glint),
+  .motion-overlay :global(.fx-reveal-aura) {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .motion-overlay :global(.fx-card-glint) {
+    z-index: 3;
+    left: -28%;
+    top: -26%;
+    width: 36%;
+    height: 152%;
+    background:
+      var(--fx-sprite-streak) center / 100% 100% no-repeat,
+      linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.16) 24%,
+        color-mix(in srgb, var(--fx-core, #fff7c8) 70%, white) 48%,
+        rgba(255, 255, 255, 0.18) 68%,
+        transparent 100%
+      );
+    background-blend-mode: screen;
+    filter: blur(0.4px);
+    mix-blend-mode: screen;
+    opacity: 0;
+  }
+
+  .motion-overlay :global(.fx-reveal-aura) {
+    z-index: 2;
+    inset: -18%;
+    border-radius: 8px;
+    background:
+      var(--fx-sprite-impact) center / contain no-repeat,
+      radial-gradient(circle at 50% 52%, transparent 34%, var(--fx-haze, rgba(156, 119, 58, 0.18)) 58%, transparent 76%),
+      linear-gradient(125deg, transparent 20%, var(--fx-glow, rgba(235, 184, 82, 0.34)), transparent 68%);
+    background-blend-mode: screen;
+    mix-blend-mode: screen;
+    opacity: 0;
+  }
+
+  .motion-overlay :global(.fx-draw-trail),
+  .motion-overlay :global(.fx-attack-beam) {
+    border-radius: 999px;
+    transform-origin: 0 50%;
+    mix-blend-mode: screen;
+  }
+
+  .motion-overlay :global(.fx-draw-trail) {
+    background:
+      var(--fx-sprite-streak) center / 100% 100% no-repeat,
+      linear-gradient(90deg, transparent 0%, var(--fx-haze, rgba(156, 119, 58, 0.18)) 18%, var(--fx-core, #fff7c8) 54%, transparent 100%);
+    background-blend-mode: screen;
+    box-shadow:
+      0 0 12px var(--fx-glow, rgba(235, 184, 82, 0.34)),
+      0 0 24px var(--fx-haze, rgba(156, 119, 58, 0.18));
+  }
+
+  .motion-overlay :global(.fx-attack-beam) {
+    background:
+      var(--fx-sprite-streak) center / 100% 100% no-repeat,
+      linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--fx-haze, rgba(156, 119, 58, 0.18)) 15%,
+        color-mix(in srgb, var(--fx-core, #fff7c8) 88%, white) 48%,
+        var(--fx-edge, #d8a645) 72%,
+        transparent 100%
+      );
+    background-blend-mode: screen;
+    box-shadow:
+      0 0 14px var(--fx-glow, rgba(235, 184, 82, 0.34)),
+      0 0 36px var(--fx-haze, rgba(156, 119, 58, 0.18));
+  }
+
+  .motion-overlay :global(.fx-projectile) {
+    border-radius: 50%;
+    background:
+      var(--fx-sprite-orb) center / contain no-repeat,
+      radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.96) 0 12%, var(--fx-core, #fff7c8) 26%, var(--fx-edge, #d8a645) 58%, transparent 72%),
+      radial-gradient(circle, var(--fx-glow, rgba(235, 184, 82, 0.34)), transparent 68%);
+    background-blend-mode: screen;
+    box-shadow:
+      0 0 16px var(--fx-glow, rgba(235, 184, 82, 0.34)),
+      0 0 42px var(--fx-haze, rgba(156, 119, 58, 0.18));
+    mix-blend-mode: screen;
+  }
+
+  .motion-overlay :global(.fx-shockwave) {
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--fx-core, #fff7c8) 80%, white);
+    background:
+      var(--fx-sprite-impact) center / contain no-repeat,
+      radial-gradient(circle, transparent 48%, var(--fx-haze, rgba(156, 119, 58, 0.18)) 52%, transparent 70%);
+    background-blend-mode: screen;
+    box-shadow:
+      0 0 16px var(--fx-glow, rgba(235, 184, 82, 0.34)),
+      inset 0 0 14px var(--fx-haze, rgba(156, 119, 58, 0.18));
+    mix-blend-mode: screen;
+  }
+
+  .motion-overlay :global(.fx-spark) {
+    border-radius: 50%;
+    background:
+      var(--fx-sprite-orb) center / contain no-repeat,
+      color-mix(in srgb, var(--fx-core, #fff7c8) 85%, white);
+    background-blend-mode: screen;
+    box-shadow:
+      0 0 8px var(--fx-glow, rgba(235, 184, 82, 0.34)),
+      0 0 18px var(--fx-edge, #d8a645);
+    mix-blend-mode: screen;
   }
 </style>

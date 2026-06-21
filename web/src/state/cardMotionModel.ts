@@ -1,4 +1,5 @@
 import type { CardView, GameView, PlayerView } from '../lib/game/types';
+import { attackEffectKind, type AttackEffectKind } from '../lib/motionEffects';
 import { REPLAY_PLAYBACK_SPEEDS, type ReplayPlaybackSpeedId } from './replayPlaybackModel';
 
 /**
@@ -40,6 +41,7 @@ export type AttackIntent = {
   defenderKey: string;
   attackerOwner: number;
   defenderOwner: number;
+  effectKind: AttackEffectKind;
   /** True when the slot's Pokemon changed this step (KO + replacement); the
    *  consumer skips the in-place move and lets the cardSwap transition own it. */
   attackerReplaced: boolean;
@@ -197,6 +199,7 @@ export function deriveMotionIntents(
           defenderKey: slotKey(defender, 'active', 0),
           attackerOwner: attacker,
           defenderOwner: defender,
+          effectKind: attackEffectKind(attackerSlot.pokemon?.cardType),
           attackerReplaced: pokemonName(prevView, attacker) !== pokemonName(nextView, attacker),
           defenderReplaced: pokemonName(prevView, defender) !== pokemonName(nextView, defender),
         };

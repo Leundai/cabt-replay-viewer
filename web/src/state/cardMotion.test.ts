@@ -7,8 +7,8 @@ import {
   type RawLog,
 } from './cardMotionModel';
 
-function card(id: number, name = `Card ${id}`): CardView {
-  return { id, name, fullName: name };
+function card(id: number, name = `Card ${id}`, overrides: Partial<CardView> = {}): CardView {
+  return { id, name, fullName: name, ...overrides };
 }
 
 function slot(owner: number, kind: 'active' | 'bench', index: number, pokemon?: CardView): PokemonSlotView {
@@ -102,6 +102,13 @@ describe('deriveMotionIntents', () => {
       attackerOwner: 0,
       defenderOwner: 1,
     });
+  });
+
+  it('derives attack effect kind from the attacking Pokemon type', () => {
+    const attacker = card(96, 'Fire Attacker', { cardType: 'Fire' });
+    const next = view([player(0, { active: slot(0, 'active', 0, attacker) }), player(1)], []);
+    const { attack } = deriveMotionIntents(next, next, [{ type: 'Attack', playerIndex: 0, cardId: 96 }]);
+    expect(attack?.effectKind).toBe('fire');
   });
 
   it('flags a KO+replacement on the defender so cardSwap can own it', () => {

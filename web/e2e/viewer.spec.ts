@@ -218,7 +218,7 @@ async function installMotionRecorder(page: Page) {
     new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
-          if (node instanceof HTMLElement && /motion-ghost|motion-reveal|fx-impact/.test(node.className)) {
+          if (node instanceof HTMLElement && /motion-ghost|motion-reveal|fx-impact|fx-draw-trail|fx-attack-beam|fx-projectile/.test(node.className)) {
             (window as unknown as { __fx: Array<{ step: string; cls: string }> }).__fx.push({
               step: stepValue(),
               cls: node.className.split(' ')[0],
@@ -262,6 +262,9 @@ test('Card cinematics fire on the matching action frames', async ({ page }) => {
   expect(fx.some((entry) => entry.cls === 'motion-ghost')).toBe(true);
   expect(fx.some((entry) => entry.cls === 'motion-reveal')).toBe(true);
   expect(fx.some((entry) => entry.cls === 'fx-impact')).toBe(true);
+  expect(fx.some((entry) => entry.cls === 'fx-draw-trail')).toBe(true);
+  expect(fx.some((entry) => entry.cls === 'fx-attack-beam')).toBe(true);
+  expect(fx.some((entry) => entry.cls === 'fx-projectile')).toBe(true);
 });
 
 test('Backward stepping plays no cinematics', async ({ page }) => {
