@@ -55,11 +55,12 @@
         class="stack-pile lost-pile"
         class:projected-hover={projectedHoverPile === 'top-lost'}
         title={`${topPlayer.name} lost zone`}
+        aria-label={`${topPlayer.name} lost zone, ${topPlayer.lostZone.length} card${topPlayer.lostZone.length === 1 ? '' : 's'}`}
         bind:this={topLostPileElement}
         onclick={() => showLostZone(topPlayer)}
       >
         {#if topPlayer.lostZone.length}
-          <CardTile card={topPlayer.lostZone[topPlayer.lostZone.length - 1]} compact />
+          <CardTile card={topPlayer.lostZone[topPlayer.lostZone.length - 1]} compact inspectable={false} />
         {/if}
         <span class="pile-count">{topPlayer.lostZone.length}</span>
       </button>
@@ -89,11 +90,12 @@
           class:projected-hover={projectedHoverPile === 'top-discard'}
           data-testid={`discard-pile-${topPlayer.index}`}
           title={`${topPlayer.name} discard`}
+          aria-label={`${topPlayer.name} discard pile, ${topPlayer.discard.length} card${topPlayer.discard.length === 1 ? '' : 's'}`}
           bind:this={topDiscardPileElement}
           onclick={() => showDiscard(topPlayer)}
         >
           {#if topPlayer.discard.length}
-            <CardTile card={topPlayer.discard[topPlayer.discard.length - 1]} compact />
+            <CardTile card={topPlayer.discard[topPlayer.discard.length - 1]} compact inspectable={false} />
           {/if}
           <span class="pile-count">{topPlayer.discard.length}</span>
         </button>
@@ -108,11 +110,12 @@
         class="stack-pile lost-pile"
         class:projected-hover={projectedHoverPile === 'bottom-lost'}
         title={`${bottomPlayer.name} lost zone`}
+        aria-label={`${bottomPlayer.name} lost zone, ${bottomPlayer.lostZone.length} card${bottomPlayer.lostZone.length === 1 ? '' : 's'}`}
         bind:this={bottomLostPileElement}
         onclick={() => showLostZone(bottomPlayer)}
       >
         {#if bottomPlayer.lostZone.length}
-          <CardTile card={bottomPlayer.lostZone[bottomPlayer.lostZone.length - 1]} compact />
+          <CardTile card={bottomPlayer.lostZone[bottomPlayer.lostZone.length - 1]} compact inspectable={false} />
         {/if}
         <span class="pile-count">{bottomPlayer.lostZone.length}</span>
       </button>
@@ -142,11 +145,12 @@
           class:projected-hover={projectedHoverPile === 'bottom-discard'}
           data-testid={`discard-pile-${bottomPlayer.index}`}
           title={`${bottomPlayer.name} discard`}
+          aria-label={`${bottomPlayer.name} discard pile, ${bottomPlayer.discard.length} card${bottomPlayer.discard.length === 1 ? '' : 's'}`}
           bind:this={bottomDiscardPileElement}
           onclick={() => showDiscard(bottomPlayer)}
         >
           {#if bottomPlayer.discard.length}
-            <CardTile card={bottomPlayer.discard[bottomPlayer.discard.length - 1]} compact />
+            <CardTile card={bottomPlayer.discard[bottomPlayer.discard.length - 1]} compact inspectable={false} />
           {/if}
           <span class="pile-count">{bottomPlayer.discard.length}</span>
         </button>

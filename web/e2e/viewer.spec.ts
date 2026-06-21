@@ -432,6 +432,25 @@ test('Opponent bench Pokemon opens the slot viewer', async ({ page }) => {
   await expect(slotViewer.getByText('Empty')).toBeVisible();
 });
 
+test('Opponent discard visible card opens the full discard viewer', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Replay details' }).click();
+  await page.getByLabel('State index').fill('38');
+
+  const discardPile = page.getByTestId('discard-pile-1');
+  await expect(discardPile).toHaveAttribute('aria-label', 'Leundai discard pile, 12 cards');
+  await discardPile.getByRole('img', { name: 'Carmine' }).click();
+
+  const zoneViewer = page.getByRole('region', { name: 'Leundai discard' });
+  await expect(zoneViewer).toBeVisible();
+  await expect(zoneViewer.getByText('12 cards')).toBeVisible();
+  await expect(zoneViewer.getByRole('img', { name: 'Basic Fighting Energy' }).first()).toBeVisible();
+  await expect(zoneViewer.getByRole('img', { name: 'Dusk Ball' }).first()).toBeVisible();
+  await expect(zoneViewer.getByRole('img', { name: 'Carmine' })).toBeVisible();
+});
+
 async function inspectBoardContainment(page: Page) {
   return page.evaluate(() => {
     const plane = document.querySelector('.game-board-plane')?.getBoundingClientRect();
