@@ -163,9 +163,9 @@
   }
 
   // --- Cinema HUD auto-hide ---------------------------------------------------
-  // The chrome (status chip, settings gear, transport dock + caption) dims away
-  // during uninterrupted playback so the board owns the screen, and returns on
-  // any pointer/key activity, on pause, or whenever the settings menu is open.
+  // Secondary controls dim away during uninterrupted playback so the board owns
+  // the screen. The matchup chip and current action caption stay visible to keep
+  // replay context anchored while the rest of the HUD rests.
   let chromeResting = $state(false);
   let settingsOpen = $state(false);
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -474,13 +474,20 @@
     border-color: var(--danger-border);
   }
 
-  /* Resting state: dim the chrome away during playback. Pointer-events drop so
+  /* Resting state: dim secondary chrome during playback. Pointer-events drop so
      the board underneath stays fully interactive; any move re-wakes it. */
-  .viewer-stage.chrome-resting :global(.game-status),
   .viewer-stage.chrome-resting .hud-settings,
-  .viewer-stage.chrome-resting :global(.replay-dock),
-  .viewer-stage.chrome-resting :global(.replay-caption) {
+  .viewer-stage.chrome-resting :global(.replay-controls),
+  .viewer-stage.chrome-resting :global(.replay-details) {
     opacity: 0;
+    pointer-events: none;
+  }
+
+  .viewer-stage.chrome-resting :global(.replay-dock) {
+    border-top-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
     pointer-events: none;
   }
 
@@ -489,11 +496,18 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .viewer-stage.chrome-resting :global(.game-status),
     .viewer-stage.chrome-resting .hud-settings,
-    .viewer-stage.chrome-resting :global(.replay-dock),
-    .viewer-stage.chrome-resting :global(.replay-caption) {
+    .viewer-stage.chrome-resting :global(.replay-controls),
+    .viewer-stage.chrome-resting :global(.replay-details) {
       opacity: 1;
+      pointer-events: auto;
+    }
+
+    .viewer-stage.chrome-resting :global(.replay-dock) {
+      border-top-color: var(--surface-toolbar-border);
+      background: var(--surface-toolbar-bg);
+      box-shadow: var(--surface-toolbar-shadow);
+      backdrop-filter: blur(var(--backdrop-blur));
       pointer-events: auto;
     }
   }

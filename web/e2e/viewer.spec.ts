@@ -347,6 +347,37 @@ test('Implicit sample replay loads and advances with playback controls', async (
   await expect.poll(async () => Number(await step.inputValue())).toBeGreaterThanOrEqual(2);
 });
 
+test('Resting replay HUD keeps the matchup and action caption visible', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/');
+
+  const step = page.getByLabel('Action step');
+  await page.getByLabel('Replay speed').selectOption('turbo');
+  await page.getByRole('button', { name: 'Play replay' }).click();
+  await expect.poll(async () => Number(await step.inputValue())).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () =>
+    page.locator('.viewer-stage').evaluate((node) => node.classList.contains('chrome-resting')),
+  ).toBe(true);
+  await expect.poll(async () =>
+    page.evaluate(() => getComputedStyle(document.querySelector('.replay-controls')!).opacity),
+  ).toBe('0');
+
+  const hudOpacity = await page.evaluate(() => {
+    const opacityFor = (selector: string) => getComputedStyle(document.querySelector(selector)!).opacity;
+    return {
+      caption: opacityFor('.replay-caption'),
+      controls: opacityFor('.replay-controls'),
+      settings: opacityFor('.hud-settings'),
+      status: opacityFor('[data-testid="game-status"]'),
+    };
+  });
+
+  expect(hudOpacity.status).toBe('1');
+  expect(hudOpacity.caption).toBe('1');
+  expect(hudOpacity.controls).toBe('0');
+  expect(hudOpacity.settings).toBe('0');
+});
+
 test('Prize cards render as visible face-down cards', async ({ page }) => {
   await routeApi(page);
   await page.goto('/?replayId=upload-cabt-match');
