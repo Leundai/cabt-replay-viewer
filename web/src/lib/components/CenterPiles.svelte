@@ -1,6 +1,5 @@
 <script lang="ts">
   import CardTile from './CardTile.svelte';
-  import { visiblePrizeSlots } from '../game/prizeZone';
   import type { PlayerView } from '../game/types';
 
   type Props = {
@@ -65,9 +64,11 @@
         <span class="pile-count">{topPlayer.lostZone.length}</span>
       </button>
       <div class="prize-stack" title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`} data-testid={`prize-stack-${topPlayer.index}`}>
-        <div class="prize-grid" aria-hidden="true">
-          {#each visiblePrizeSlots(topPlayer.prizes) as index}
-            <span class="prize-card" data-testid={`prize-card-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+        <div class="prize-grid">
+          {#each topPlayer.prizes.cards as prizeCard, index}
+            <div class="prize-card" data-testid={`prize-card-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}>
+              <CardTile card={prizeCard} compact faceDown={prizeCard.id == null} inspectable={false} />
+            </div>
           {/each}
         </div>
         <span class="prize-count">{topPlayer.prizes.remaining}</span>
@@ -120,9 +121,11 @@
         <span class="pile-count">{bottomPlayer.lostZone.length}</span>
       </button>
       <div class="prize-stack" title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`} data-testid={`prize-stack-${bottomPlayer.index}`}>
-        <div class="prize-grid" aria-hidden="true">
-          {#each visiblePrizeSlots(bottomPlayer.prizes) as index}
-            <span class="prize-card" data-testid={`prize-card-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+        <div class="prize-grid">
+          {#each bottomPlayer.prizes.cards as prizeCard, index}
+            <div class="prize-card" data-testid={`prize-card-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}>
+              <CardTile card={prizeCard} compact faceDown={prizeCard.id == null} inspectable={false} />
+            </div>
           {/each}
         </div>
         <span class="prize-count">{bottomPlayer.prizes.remaining}</span>
@@ -434,15 +437,15 @@
     left: calc(var(--col) * var(--prize-card-w) * 0.98);
     top: calc(var(--row) * var(--prize-card-w) * 0.71);
     width: var(--prize-card-w);
+    /* The CardTile inside sizes to --card-w; the prize cell is prize-card-w. */
+    --card-w: var(--prize-card-w);
     aspect-ratio: 63 / 88;
     border-radius: 4px;
-    border: 1px solid color-mix(in srgb, var(--prize-border) 82%, white);
-    background:
-      var(--cardback-shade),
-      url("/assets/cardback.png") center / cover no-repeat;
-    box-shadow:
-      0 3px 8px rgba(23, 30, 38, 0.22),
-      0 0 0 1px rgba(255, 255, 255, 0.18);
+  }
+
+  .prize-card :global(.card-tile) {
+    width: 100%;
+    height: 100%;
   }
 
   .prize-count {

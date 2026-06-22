@@ -376,6 +376,23 @@
     ];
   }
 
+  /** A FACE-UP clone of a card (its art) for a flight, so a card "shows up"
+   *  face-up like the real one it becomes. Falls back to a cardback motion-ghost
+   *  when the art can't be resolved (e.g. the synthetic test fixture). */
+  function makeCardClone(card: CardView | null | undefined, faceUp: boolean, w: number, h: number): HTMLElement {
+    const art = faceUp ? safeCardImageUrl(card?.imageUrl ?? card?.cardImage) : '';
+    if (art) {
+      const node = makeNode('motion-reveal', w, h);
+      const img = document.createElement('img');
+      img.src = art;
+      img.alt = '';
+      img.draggable = false;
+      node.appendChild(img);
+      return node;
+    }
+    return makeNode('motion-ghost', w, h);
+  }
+
   function runDraw(intent: DrawIntent, overlay: DOMRect, budgetMs: number, reduced: boolean) {
     const owner = intent.ownerIndex;
     const deck = boxFor(`[data-testid="deck-pile-${owner}"]`, overlay);
@@ -445,11 +462,15 @@
         cardMotionStore.releaseDrawHand(handKey);
         continue;
       }
-      // Always a cardback ghost: draw order != sorted order, so a face-up clone
-      // showing intent.cards[i] would land on tail[i] (a DIFFERENT card) — the
-      // mismatch the user saw. The ghost is a position-and-presence cue only; the
-      // suppressed real card (face-up hand) reveals on landing.
-      const node = makeNode('motion-ghost', cardW, cardH);
+      // FACE-UP clone of the drawn card with the glint/aura glimmer, so a card
+      // "shows up" face-up and shimmering (the user's ask). The hand is no longer
+      // sorted, so the trailing tail[i] IS intent.cards[i] — the face matches where
+      // it lands. Falls back to a cardback when art is unresolved. The suppressed
+      // real card (face-up hand) reveals on landing; the opponent's always-visible
+      // fan gets a face-up clone that fades over it (endOpacity 0).
+      const drawnCard = intent.cards?.[i] ?? null;
+      const node = makeCardClone(drawnCard, true, cardW, cardH);
+      decorateReveal(node, attackEffectKind(drawnCard?.cardType ?? drawnCard?.energyType), budgetMs, reduced);
 
       // Treasured draw-trail FX rides the flight, unchanged.
       runDrawTrail(deck, { cx: dest.cx, cy: dest.cy }, delay, duration);
