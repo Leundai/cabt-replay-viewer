@@ -4,7 +4,7 @@
   import { safeCardImageUrl } from '../game/cardImages';
   import { energyIconSrc, pokemonTypeIconSrc, pokemonTypeLabelFor } from '../game/energyIcons';
   import type { PokemonSlotView } from '../game/types';
-  import { cardSwap, pop, EASE_IN_OUT, EASE_OUT } from '../motion';
+  import { cardSwap, pop, EASE_ANTICIP, EASE_ARC, EASE_OUT } from '../motion';
   import { applyEffectVars } from '../motionEffects';
   import { motionDelay, motionDuration } from '../replayMotionTiming';
   import { cardMotionStore, type AttackIntent } from '../../state/cardMotion.svelte';
@@ -184,15 +184,20 @@
 
     if (isAttacker) {
       const duration = motionDuration(budgetMs, 0.42, 260, 680);
+      // Per-phase easing for a real STRIKE (E's lunge), not a symmetric ease-in-out
+      // that softens the start and kills the snap: the wind-up pull-back anticipates
+      // (EASE_ANTICIP), the drive-in snaps (EASE_ARC), the recoil settles with weight
+      // (EASE_OUT/settle). Same keyframes, magnitudes and contact timing as before —
+      // only the curve between them changes. FX classes untouched.
       activeAnims.push(
         atkEl.animate(
           [
-            { transform: 'translate(0px, 0px) scale(1)', offset: 0 },
-            { transform: `translate(${(-dx * 0.16).toFixed(2)}px, ${(-dy * 0.16).toFixed(2)}px) scale(1)`, offset: 0.2 },
-            { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(1.05)`, offset: 0.46 },
+            { transform: 'translate(0px, 0px) scale(1)', offset: 0, easing: EASE_ANTICIP },
+            { transform: `translate(${(-dx * 0.16).toFixed(2)}px, ${(-dy * 0.16).toFixed(2)}px) scale(1)`, offset: 0.2, easing: EASE_ARC },
+            { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(1.05)`, offset: 0.46, easing: EASE_OUT },
             { transform: 'translate(0px, 0px) scale(1)', offset: 1 },
           ],
-          { duration, easing: EASE_IN_OUT },
+          { duration },
         ),
       );
     }

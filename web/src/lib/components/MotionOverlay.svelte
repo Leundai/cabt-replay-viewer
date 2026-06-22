@@ -1,16 +1,19 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { safeCardImageUrl } from '../game/cardImages';
-  import { EASE_IN_OUT, EASE_OUT } from '../motion';
+  import { EASE_ARC, EASE_IN_OUT, EASE_OUT } from '../motion';
   import { applyEffectVars, attackEffectKind, type AttackEffectKind } from '../motionEffects';
   import { motionDelay, motionDuration } from '../replayMotionTiming';
-  import { cardMotionStore, type AttackIntent, type DrawIntent, type PlayIntent } from '../../state/cardMotion.svelte';
+  import { cardMotionStore, type AttackIntent, type DrawIntent, type PlayIntent, type PrizeIntent } from '../../state/cardMotion.svelte';
 
   // A FLAT overlay that covers the board. It deliberately does NOT inherit the
   // board plane's 3D tilt — clones read crisp and we sidestep Safari's
   // preserve-3d compositing bugs. Ghosts/clones are built imperatively so the
   // FLIP-style geometry (measure real rects -> tween transforms) and the
   // interruption story stay fully in our hands. The board itself is untouched.
+
+  // Weighted-flight easings ported from prototype E. WAAPI does not resolve CSS
+  // custom properties in the `easing` field, so these are LITERAL bezier strings.
 
   let overlayEl = $state<HTMLDivElement>();
   // Seed from the live batch so a remount doesn't replay an in-flight batch.
@@ -26,6 +29,11 @@
       cancelAnimationFrame(pendingRaf);
       pendingRaf = 0;
     }
+    // Cancelling fires each tracked anim's oncancel (see track()), which runs the
+    // SAME release callback as onfinish — so a superseded clone always reveals (or
+    // hands back) its card and never strands it invisible. The store's #publish
+    // also clears + re-seeds suppression for the next batch, and the budget safety
+    // timer is a final backstop, so a hidden card can never get stuck.
     activeAnims.forEach((anim) => anim.cancel());
     activeAnims = [];
     activeNodes.forEach((node) => node.remove());
@@ -41,6 +49,32 @@
   function boxFor(selector: string, overlay: DOMRect): Box | null {
     const el = document.querySelector(selector);
     return el ? localBox(el.getBoundingClientRect(), overlay) : null;
+  }
+
+  function boxOfEl(el: Element, overlay: DOMRect): Box {
+    return localBox(el.getBoundingClientRect(), overlay);
+  }
+
+  /** True when an element (or an ancestor) is rotated ~180deg — the opponent
+   *  active's inner `.card-tile` is `rotate(180deg)`, so a clone must land at 180
+   *  to match the revealed card's orientation instead of visibly flipping. */
+  function isRotated180(el: Element | null): boolean {
+    let node: Element | null = el;
+    let guard = 0;
+    while (node && guard < 6) {
+      const t = getComputedStyle(node).transform;
+      if (t && t !== 'none') {
+        // matrix(-1, 0, 0, -1, …) is a 180deg rotation (and matrix3d variant).
+        const m = t.match(/matrix\(([^)]+)\)/);
+        if (m) {
+          const parts = m[1].split(',').map((p) => parseFloat(p));
+          if (parts[0] < -0.5 && parts[3] < -0.5) return true;
+        }
+      }
+      node = node.parentElement;
+      guard += 1;
+    }
+    return false;
   }
 
   /** Transform that places a w*h node (origin top-left) so its CENTRE sits at
@@ -61,10 +95,21 @@
 
   function track(anim: Animation, node: HTMLElement, onDone?: () => void) {
     activeAnims.push(anim);
+    // Reveal-first, then remove the clone in the SAME task so there is never a
+    // frame with neither the clone nor the real card painted (atomic hand-off).
     anim.onfinish = () => {
+      onDone?.();
       node.remove();
       activeNodes = activeNodes.filter((n) => n !== node);
-      onDone?.();
+    };
+    // On cancel (a superseding batch's clearMotionFx) we DON'T run onDone: the
+    // store's #publish has already cleared + re-seeded suppression for the next
+    // batch, so calling release here could delete a key the NEW batch just seeded
+    // and strand its hidden card. Just drop the clone; the deliberate next action
+    // owns the board (mirrors prototype E's abort()).
+    anim.oncancel = () => {
+      node.remove();
+      activeNodes = activeNodes.filter((n) => n !== node);
     };
   }
 
@@ -135,7 +180,7 @@
       trail.animate(
         [
           { transform: lineFrame(start, end, h, 0.05), opacity: 0, filter: 'blur(5px)' },
-          { opacity: 0.62, filter: 'blur(1px)', offset: 0.28 },
+          { opacity: 0.38, filter: 'blur(2px)', offset: 0.32 },
           { transform: lineFrame(start, end, h, 1), opacity: 0, filter: 'blur(8px)' },
         ],
         { duration: Math.max(160, duration - 20), delay, easing: EASE_OUT, fill: 'backwards' },
@@ -245,49 +290,356 @@
     );
   }
 
+  type FlightPoint = { cx: number; cy: number; scale: number };
+
+  /** Build prototype E's WEIGHTED ARC keyframes for a w*h flying node travelling
+   *  from `from` to `to` (both centre/scale), and spawn a separate contact-shadow
+   *  node beneath it that grows on lift and shrinks on landing (sells elevation).
+   *  Returns the card keyframes; the shadow is animated + tracked internally so an
+   *  interruption (clearMotionFx) never leaks it. `endOpacity` lets a slot-landing
+   *  /draw-landing clone stay SOLID (1) while a fading reveal ends at 0.
+   *
+   *  Curve language ported from E's flyFromTo() / flightFrames (the weight the
+   *  user loved): a real lift apex scaled by distance, banking toward the
+   *  horizontal velocity vector that levels to 0, a small spring overshoot a hair
+   *  past the destination, then rest exactly on it. The single EASE_ARC timing is
+   *  applied at the animate() level by the CALLER (not per keyframe), so velocity
+   *  stays continuous — no per-segment ease-out discontinuity (the "jagged" tell).
+   *  We deliberately do NOT reintroduce the launch anticipation DIP for in-app
+   *  flights (the user retracted it); the lift + bank + small overshoot carry the
+   *  weight smoothly. `restRotation` lets a clone land matching a 180deg-rotated
+   *  destination (the opponent active) so the reveal never visibly flips. */
+  function weightedFlightCard(
+    from: FlightPoint,
+    to: FlightPoint,
+    w: number,
+    h: number,
+    endOpacity: number,
+    duration: number,
+    delay: number,
+    restRotation = 0,
+  ): Keyframe[] {
+    const dx = to.cx - from.cx;
+    const dy = to.cy - from.cy;
+    const dist = Math.hypot(dx, dy);
+    const lift = Math.min(70, dist * 0.2) + 12; // E's upward bow at the apex
+    const bank = clamp(-dx / 28, -12, 12); // lean into the travel direction
+    const midScale = from.scale + (to.scale - from.scale) * 0.5;
+    const ovx = -dx * 0.012; // overshoot a touch PAST identity, then settle back
+    const ovy = -dy * 0.012;
+
+    // Contact shadow on the ground plane — grows as the card lifts (peak ~1.5 at
+    // the apex), shrinks on landing; opacity dips mid-flight then firms on contact
+    // (E's shadowKeys). Driven by EASE_ARC at the animate level to match the card.
+    const shW = w * 0.92;
+    const shH = h * 0.34;
+    const shadow = makeNode('motion-contact-shadow', shW, shH);
+    const shFrame = (px: number, py: number, scale: number, op: number): Keyframe => ({
+      transform: `translate(${(px - shW / 2).toFixed(2)}px, ${(py - shH / 2).toFixed(2)}px) scale(${scale.toFixed(3)})`,
+      opacity: op,
+    });
+    const groundY = (t: number) => from.cy + dy * t + h * 0.42;
+    track(
+      shadow.animate(
+        [
+          { offset: 0, ...shFrame(from.cx, groundY(0), 0.72, 0.34) },
+          { offset: 0.5, ...shFrame(from.cx + dx * 0.5, groundY(0.5), 1.5, 0.12) },
+          { offset: 0.82, ...shFrame(from.cx + dx * 0.82, groundY(0.82), 0.95, 0.24) },
+          { offset: 1, ...shFrame(to.cx, groundY(1), 0.66, endOpacity > 0 ? 0.22 : 0) },
+        ],
+        { duration, delay, easing: EASE_ARC, fill: 'backwards' },
+      ),
+      shadow,
+    );
+
+    const fr = (px: number, py: number, scale: number, r: number) => frame(px, py, w, h, scale, r);
+    // E's 5-keyframe weighted arc (no launch dip): lift apex with full bank, a
+    // leveling descent, a small spring overshoot, then rest exactly on target.
+    // Opacity holds SOLID and only settles to endOpacity over the last sliver, so
+    // a fading clone reads as a clean arrival, never a ghost. The clone lands at
+    // `restRotation` (0 normally; 180 for the rotated opponent active).
+    return [
+      { offset: 0, transform: fr(from.cx, from.cy, from.scale, restRotation * 0.04 + bank * 0.2), opacity: 1 },
+      { offset: 0.5, transform: fr(from.cx + dx * 0.5, from.cy + dy * 0.5 - lift, midScale, restRotation * 0.4 + bank), opacity: 1 },
+      {
+        offset: 0.82,
+        transform: fr(
+          from.cx + dx * 0.82,
+          from.cy + dy * 0.82 - lift * 0.16,
+          from.scale + (to.scale - from.scale) * 0.9,
+          restRotation * 0.82 + bank * 0.3,
+        ),
+        opacity: 1,
+      },
+      { offset: 0.93, transform: fr(to.cx + ovx, to.cy + ovy - 1.5, to.scale * 1.012, restRotation * 0.93 + bank * 0.08), opacity: 1 },
+      { offset: 1, transform: fr(to.cx, to.cy, to.scale, restRotation), opacity: endOpacity },
+    ];
+  }
+
   function runDraw(intent: DrawIntent, overlay: DOMRect, budgetMs: number, reduced: boolean) {
-    const deck = boxFor(`[data-testid="deck-pile-${intent.ownerIndex}"]`, overlay);
-    const hand = boxFor(`[data-testid="hand-${intent.ownerIndex}"]`, overlay);
-    if (!deck || !hand) {
+    const owner = intent.ownerIndex;
+    const deck = boxFor(`[data-testid="deck-pile-${owner}"]`, overlay);
+    const handEl = document.querySelector(`[data-testid="hand-${owner}"]`);
+    if (!deck || !handEl) {
       return;
     }
+    const faceUpHand = !handEl.classList.contains('concealed');
+    const count = Math.min(intent.count, 7);
+
+    if (reduced) {
+      // No flight, no clone (the two-representation problem reduced motion is
+      // meant to avoid): un-suppress the real cards immediately and let their
+      // reduced handEnter (a 150ms opacity fade) be the sole presence cue.
+      for (let i = 0; i < count; i += 1) {
+        cardMotionStore.releaseDrawHand(`hand-${owner}-${i}`);
+      }
+      return;
+    }
+
+    // The freshly-drawn cards are the LAST `count` in sorted DOM order (draws
+    // append then the hand sorts) — the exact cards the store suppressed. Measure
+    // their TRUE rendered rects so each clone flies to where the card actually is,
+    // not a guessed X (the old targetX landed where the sorted card was NOT). The
+    // face-up hand wraps cards in `.hand-card`; the concealed fan renders bare
+    // CardTiles, so fall back to the per-card testids there.
+    let handCardEls = Array.from(handEl.querySelectorAll('.hand-card'));
+    if (handCardEls.length === 0) {
+      handCardEls = Array.from(handEl.querySelectorAll('[data-testid^="hand-card-"]'));
+    }
+    const tail = handCardEls.slice(Math.max(0, handCardEls.length - count));
+
+    // Each clone is sized to the deck pile (its source) and grows to the measured
+    // hand-card size on landing — a believable deck→hand shrink-to-fit.
     const cardW = Math.max(40, deck.w);
     const cardH = Math.max(56, deck.h);
 
-    if (reduced) {
-      // No flight — a single presence cue fading in at the hand.
+    // ONE BY ONE: a stagger so a multi-card draw fills sequentially, capped so the
+    // last card's flight finishes inside the batch budget (lead + (count-1)*stagger
+    // + duration < budgetMs) — a still-airborne clone must not be cancelled by the
+    // next step. Stagger front-loaded so an N-card draw reads one-by-one but
+    // finishes promptly instead of trickling to the budget edge.
+    const duration = motionDuration(budgetMs, 0.4, 240, 720);
+    const maxStagger = count > 1 ? Math.max(0, (budgetMs - 40 - duration) / (count - 1)) : 0;
+    const stagger = Math.min(motionDuration(budgetMs, 0.055, 36, 90), maxStagger);
+
+    // A card-sized fallback width when the sorted hand card isn't measurable yet —
+    // derived from the rail height (a hand card is ~63:88), NEVER the rail width.
+    const railBox = boxFor(`[data-testid="hand-${owner}"]`, overlay);
+    const fallbackCardW = railBox
+      ? clamp(railBox.h / (88 / 63), cardW * 0.8, cardW * 2.2)
+      : cardW;
+
+    for (let i = 0; i < count; i += 1) {
+      const delay = i * stagger;
+      const realCard = tail[i];
+      const handKey = `hand-${owner}-${i}`;
+      // Land on the real, already-rendered, SORTED hand-card rect when present;
+      // otherwise fly to a CARD-SIZED box at the rail centre (never the rail width)
+      // so a missing/late tail can never scale a clone to fill the screen.
+      const dest = realCard
+        ? boxOfEl(realCard, overlay)
+        : railBox
+          ? { ...railBox, w: fallbackCardW, h: fallbackCardW * (88 / 63) }
+          : null;
+      if (!dest) {
+        cardMotionStore.releaseDrawHand(handKey);
+        continue;
+      }
+      // Always a cardback ghost: draw order != sorted order, so a face-up clone
+      // showing intent.cards[i] would land on tail[i] (a DIFFERENT card) — the
+      // mismatch the user saw. The ghost is a position-and-presence cue only; the
+      // suppressed real card (face-up hand) reveals on landing.
       const node = makeNode('motion-ghost', cardW, cardH);
-      node.style.transform = frame(hand.cx, hand.cy, cardW, cardH, 0.96);
-      track(
-        node.animate(
-          [{ opacity: 0 }, { opacity: 0.85, offset: 0.5 }, { opacity: 0 }],
-          { duration: motionDuration(budgetMs, 0.12, 160, 240), easing: EASE_OUT },
-        ),
-        node,
+
+      // Treasured draw-trail FX rides the flight, unchanged.
+      runDrawTrail(deck, { cx: dest.cx, cy: dest.cy }, delay, duration);
+
+      // ONE continuous object deck→the real card's rect; reveal the real hand card
+      // the instant the clone lands (atomic, via track's onfinish). The concealed
+      // top hand never hides, so its ghost fades out (endOpacity 0) over the
+      // always-visible fan; the face-up hand's clone stays solid (endOpacity 1).
+      const endScale = clamp(dest.w / cardW, 0.5, 3.0);
+      const endOpacity = faceUpHand ? 1 : 0;
+      const frames = weightedFlightCard(
+        { cx: deck.cx, cy: deck.cy, scale: 0.92 },
+        { cx: dest.cx, cy: dest.cy, scale: endScale },
+        cardW,
+        cardH,
+        endOpacity,
+        duration,
+        delay,
       );
+      frames[0] = { ...frames[0], opacity: 0 }; // fade in over the first sliver, no pop
+      track(
+        node.animate(frames, { duration, delay, easing: EASE_ARC, fill: 'backwards' }),
+        node,
+        () => cardMotionStore.releaseDrawHand(handKey),
+      );
+    }
+  }
+
+  /** Resolve the prize grid's 2x3 cell centres. Prefers the per-cell anchors
+   *  (data-testid="prize-{owner}-{n}"); falls back to computing the cell centres
+   *  from the grid box so the flight still lands sensibly if a cell isn't painted
+   *  (e.g. the take case, where the claimed cell is already gone from the DOM). */
+  function prizeCellBoxes(owner: number, overlay: DOMRect): Box[] {
+    const grid = document.querySelector(`[data-testid="prize-grid-${owner}"]`);
+    if (!grid) {
+      return [];
+    }
+    const gridBox = localBox(grid.getBoundingClientRect(), overlay);
+    const boxes: Box[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const cell = boxFor(`[data-testid="prize-${owner}-${i}"]`, overlay);
+      if (cell) {
+        boxes.push(cell);
+        continue;
+      }
+      // Fallback: 2 columns x 3 rows laid out across the measured grid box.
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const cw = gridBox.w / 2;
+      const ch = gridBox.h / 3;
+      const x = gridBox.x + col * cw;
+      const y = gridBox.y + row * ch;
+      boxes.push({ x, y, w: cw, h: ch, cx: x + cw / 2, cy: y + ch / 2 });
+    }
+    return boxes;
+  }
+
+  function runPrize(intent: PrizeIntent, overlay: DOMRect, budgetMs: number, reduced: boolean) {
+    const cells = prizeCellBoxes(intent.ownerIndex, overlay);
+    const deck = boxFor(`[data-testid="deck-pile-${intent.ownerIndex}"]`, overlay);
+    // Cell-sized cardback clones (the grid cells are smaller than deck/hand). On a
+    // TAKE the claimed cells are already gone, so cells can be []; derive a sane
+    // card size from the grid box (63:88 aspect) so the loop still runs and every
+    // suppressed hand card gets released on landing.
+    const gridBox = boxFor(`[data-testid="prize-grid-${intent.ownerIndex}"]`, overlay);
+    const cellW = cells[0]?.w ?? (gridBox ? gridBox.w / 2 : 56);
+    const cellH = cells[0]?.h ?? cellW * (88 / 63);
+    const cardW = Math.max(28, cellW);
+    const cardH = Math.max(40, cellH);
+    const count = Math.min(intent.count, 6);
+
+    if (intent.mode === 'setup') {
+      // Setup needs the grid cells to deal ONTO; nothing to do if they aren't
+      // painted. (TAKE does not need cells — it flies to the hand.)
+      if (!deck || cells.length === 0) {
+        return;
+      }
+      if (reduced) {
+        // No flight — a single presence cue fading in over the grid.
+        const node = makeNode('motion-ghost', cardW, cardH);
+        const mid = cells[Math.min(count - 1, cells.length - 1)] ?? cells[0];
+        node.style.transform = frame(mid.cx, mid.cy, cardW, cardH, 0.96);
+        track(
+          node.animate(
+            [{ opacity: 0 }, { opacity: 0.85, offset: 0.5 }, { opacity: 0 }],
+            { duration: motionDuration(budgetMs, 0.12, 160, 240), easing: EASE_OUT },
+          ),
+          node,
+        );
+        return;
+      }
+      // E's deal feel: each prize flies deck -> its grid cell on the weighted arc,
+      // staggered, and STAYS (the painted cell already shows the cardback, so the
+      // clone fades out exactly as it lands and the static cell reads as arrival).
+      const stagger = motionDuration(budgetMs, count > 4 ? 0.034 : 0.046, 40, 70);
+      const duration = motionDuration(budgetMs, 0.4, 240, 720);
+      for (let i = 0; i < count && i < cells.length; i += 1) {
+        const cell = cells[i];
+        const node = makeNode('motion-ghost', cardW, cardH);
+        const frames = weightedFlightCard(
+          { cx: deck.cx, cy: deck.cy, scale: 1 },
+          { cx: cell.cx, cy: cell.cy, scale: 1 },
+          cardW,
+          cardH,
+          0,
+          duration,
+          i * stagger,
+        );
+        track(node.animate(frames, { duration, delay: i * stagger, easing: EASE_ARC, fill: 'backwards' }), node);
+      }
       return;
     }
 
-    const count = Math.min(intent.count, 4);
-    const stagger = motionDuration(budgetMs, intent.count > 4 ? 0.025 : 0.034, 35, 70);
-    const duration = motionDuration(budgetMs, 0.38, 220, 720);
+    // TAKE: a climactic beat — use the SAME one-continuous-card hand-off as a
+    // draw. The claimed prize(s) lift from the grid and fly to the claiming
+    // owner's real hand-card rect(s); the store suppressed those hand cards, so
+    // the flight is their sole entrance and releaseDrawHand reveals each on
+    // landing. The clone is a cardback ghost (prizes are facedown) that becomes
+    // the now-face-up real hand card — consistent with the draw motion language.
+    const owner = intent.ownerIndex;
+    const handEl = document.querySelector(`[data-testid="hand-${owner}"]`);
+    if (!handEl) {
+      return;
+    }
+    if (reduced) {
+      for (let i = 0; i < count; i += 1) {
+        cardMotionStore.releaseDrawHand(`hand-${owner}-${i}`);
+      }
+      return;
+    }
+    // The concealed top hand never hides its cards (suppressedTail=0) and its
+    // facedown fan is always visible, so a clone must FADE OUT at the rail centre
+    // — never land solid on top of the already-visible fan (the BUG-3 double card).
+    const concealed = handEl.classList.contains('concealed');
+    const grid = gridBox ?? cells[0] ?? { x: 0, y: 0, w: cardW, h: cardH, cx: overlay.width / 2, cy: overlay.height / 2 };
+    const origin = grid;
+    const railBox = boxFor(`[data-testid="hand-${owner}"]`, overlay);
+    // A card-sized destination width when the real sorted hand card isn't
+    // measurable — derived from the rail height (a hand card is ~63:88), clamped
+    // to a card range so the end scale stays near 1. NEVER the full rail width.
+    const fallbackCardW = railBox
+      ? clamp(railBox.h / (88 / 63), cardW * 0.8, cardW * 2.2)
+      : cardW;
+    // The claimed cards are the LAST `count` sorted hand cards (the store
+    // suppressed exactly those) — measure their true rendered rects.
+    const handCardEls = Array.from(handEl.querySelectorAll('.hand-card'));
+    const tail = handCardEls.slice(Math.max(0, handCardEls.length - count));
+    // A facedown cardback needs less air time than a hero reveal — keep it brisk
+    // and front-load the stagger so a multi-card claim finishes inside ~half the
+    // budget instead of trickling to the edge.
+    const duration = motionDuration(budgetMs, 0.34, 220, 560);
+    const maxStagger = count > 1 ? Math.max(0, (budgetMs - 40 - duration) / (count - 1)) : 0;
+    const stagger = Math.min(motionDuration(budgetMs, 0.055, 36, 90), maxStagger);
     for (let i = 0; i < count; i += 1) {
-      const t = count <= 1 ? 0.5 : i / (count - 1);
-      const targetX = hand.x + hand.w * (0.2 + 0.6 * t);
-      const tilt = -4 + 8 * t;
+      const delay = i * stagger;
+      const realCard = tail[i];
+      const handKey = `hand-${owner}-${i}`;
+      // Land on the real sorted hand card when present; otherwise fly to a
+      // CARD-SIZED box at the rail CENTRE (never the rail width) so the end scale
+      // can never blow up to fill the screen.
+      const dest = realCard
+        ? boxOfEl(realCard, overlay)
+        : railBox
+          ? { ...railBox, w: fallbackCardW, h: fallbackCardW * (88 / 63) }
+          : null;
+      if (!dest) {
+        cardMotionStore.releaseDrawHand(handKey);
+        continue;
+      }
       const node = makeNode('motion-ghost', cardW, cardH);
-      runDrawTrail(deck, { cx: targetX, cy: hand.cy }, i * stagger, duration);
+      // Defensive clamp: a mis-measured anchor can never scale a clone past 3x.
+      const endScale = clamp(dest.w / cardW, 0.5, 3.0);
+      // Concealed fan: the clone is a decorative ghost that dissolves (endOpacity 0)
+      // over the always-visible fan. Face-up hand: the clone stays solid and the
+      // suppressed real card reveals on landing (one continuous card).
+      const endOpacity = concealed ? 0 : 1;
+      const frames = weightedFlightCard(
+        { cx: origin.cx, cy: origin.cy, scale: 1 },
+        { cx: dest.cx, cy: dest.cy, scale: endScale },
+        cardW,
+        cardH,
+        endOpacity,
+        duration,
+        delay,
+      );
+      frames[0] = { ...frames[0], opacity: 0 };
       track(
-        node.animate(
-          [
-            { transform: frame(deck.cx, deck.cy, cardW, cardH, 0.9, tilt * 0.5), opacity: 0, filter: 'blur(2px)', offset: 0 },
-            { opacity: 1, filter: 'blur(0px)', offset: 0.25 },
-            { opacity: 1, offset: 0.8 },
-            { transform: frame(targetX, hand.cy, cardW, cardH, 0.96, 0), opacity: 0, offset: 1 },
-          ],
-          { duration, delay: i * stagger, easing: EASE_OUT, fill: 'backwards' },
-        ),
+        node.animate(frames, { duration, delay, easing: EASE_ARC, fill: 'backwards' }),
         node,
+        () => cardMotionStore.releaseDrawHand(handKey),
       );
     }
   }
@@ -297,16 +649,38 @@
     const center: Box = plane
       ? localBox(plane.getBoundingClientRect(), overlay)
       : { x: 0, y: 0, w: overlay.width, h: overlay.height, cx: overlay.width / 2, cy: overlay.height / 2 };
-    const dest = intent.destSelector ? boxFor(`[data-testid="${intent.destSelector}"]`, overlay) : null;
+    // Measure the destination from the INNER `.slot-card` (the real card rect),
+    // not the wrapper — the wrapper box includes overflowing badges / HP bubble
+    // and the active slot's translateZ, so a clone centred on it settled a few
+    // px / % off and snapped. Fall back to the wrapper only if the inner card
+    // isn't painted yet (the slot card is suppressed but still laid out).
+    // A real slot landing measures the INNER `.slot-card` (the true card rect) so
+    // the clone lands EXACTLY on the card — the wrapper box includes overflowing
+    // badges / HP bubble and the active slot's translateZ, which made the old clone
+    // settle a few px / % off and snap. A trainer (discard-pile dest) has no inner
+    // card; we keep the synthesized 63:88 box for the read-pose reveal there.
+    const innerSlotEl = intent.destSelector?.startsWith('slot-')
+      ? document.querySelector(`[data-testid="${intent.destSelector}"] .slot-card`)
+      : null;
+    const destEl = innerSlotEl ?? (intent.destSelector ? document.querySelector(`[data-testid="${intent.destSelector}"]`) : null);
+    const dest = destEl ? boxOfEl(destEl, overlay) : null;
+    // The opponent active's inner card is rotate(180deg); land the clone matching
+    // that orientation so the reveal never visibly flips on landing.
+    const destRotation = innerSlotEl && isRotated180(innerSlotEl) ? 180 : 0;
     const hand = boxFor(`[data-testid="hand-${intent.ownerIndex}"]`, overlay);
 
+    // A play whose card lands in a slot is suppressed by the store; the clone's
+    // onFinish (releaseDest) is the ONLY thing that reveals it. Compute the key up
+    // front so EVERY early return below can hand the slot back instead of leaving
+    // the real Pokemon hidden until the budget+220 safety timer.
+    const releaseKey = intent.destSelector?.startsWith('slot-') ? intent.destSelector : null;
+
     // Guard against a zero-size measured anchor so heroScale can never blow up
-    // to Infinity/NaN (which would emit an invalid scale() transform). Height is
-    // always derived from width at the true card ratio (63:88) — never the raw
-    // measured destination height, which can be non-card-shaped and made the
-    // surfaced reveal stretch or clip its bottom edge.
+    // to Infinity/NaN. When we measured a real inner slot card, use BOTH its
+    // width and height (match the true card rect); otherwise synthesize a 63:88
+    // box from width so a non-card-shaped pile box never distorts the reveal.
     const baseW = Math.max(1, dest ? dest.w : Math.min(124, overlay.width * 0.09));
-    const baseH = baseW * (88 / 63);
+    const baseH = innerSlotEl && dest ? Math.max(1, dest.h) : baseW * (88 / 63);
     // Enlarge to a prominent hero size, but always capped to fit the board so
     // the surfaced card is never cut off, then clamp its centre to stay fully
     // on-screen regardless of where the board's geometric centre falls.
@@ -322,8 +696,12 @@
     const art = safeCardImageUrl(intent.card?.imageUrl ?? intent.card?.cardImage);
     const name = intent.card?.name;
     // Nothing meaningful to surface — skip the reveal entirely rather than
-    // flashing a blank card or the literal word "Card".
+    // flashing a blank card or the literal word "Card". Release the suppressed
+    // slot first so the real Pokemon is never stranded hidden.
     if (!art && !name) {
+      if (releaseKey) {
+        cardMotionStore.releaseDest(releaseKey);
+      }
       return;
     }
 
@@ -365,37 +743,93 @@
       return;
     }
 
-    const total = motionDuration(budgetMs, 0.72, 420, 1280);
-    const rise = Math.round(total * 0.3);
-    const hold = Math.round(total * 0.26);
-    const r1 = rise / total;
-    const r2 = (rise + hold) / total;
+    // ONE continuous flight — no mid-screen hold, no chained phases. A snappier
+    // envelope than the old two-phase (which froze ~230ms at centre): a single
+    // weighted arc carries the card hand->slot or hand->discard. The arc already
+    // scales UP mid-flight (midScale at offset 0.5) — that brief enlargement IS the
+    // legibility beat, so no dead stop is needed.
+    const total = motionDuration(budgetMs, 0.55, 320, 900);
     const origin: Box = hand ?? { x: 0, y: 0, w: baseW, h: baseH, cx: heroX, cy: overlay.height * 0.86 };
-    const settle = dest ? frame(dest.cx, dest.cy, baseW, baseH, 1) : frame(heroX, heroY, baseW, baseH, heroScale * 0.92);
 
     // When the card lands in a real board slot, the clone stays solid all the way
     // down and the slot's hidden card is revealed the instant the clone is
     // removed — one continuous card, no pop. Reveals that fade at centre (no slot)
-    // keep the fade-out. `releaseKey` reveals the suppressed slot on finish (also
-    // for the centre-fade fallback when the slot element wasn't found at runtime).
-    const releaseKey = intent.destSelector?.startsWith('slot-') ? intent.destSelector : null;
+    // keep the fade-out. `releaseKey` (declared above) reveals the suppressed slot
+    // on finish — also for the centre-fade fallback when the slot element wasn't
+    // found at runtime, so a suppressed slot is never stranded.
     const landsInSlot = !!dest && !!releaseKey;
-    const endOpacity = landsInSlot ? 1 : 0;
+    const onFinish = releaseKey ? () => cardMotionStore.releaseDest(releaseKey) : undefined;
 
+    // The clone is sized at `baseW` (slot width when there is a slot). A hand card
+    // reads smaller than a slot, so launch at a hand-card scale and grow to 1 over
+    // the flight ("scale from hand-card size to slot size"). Estimate the hand card
+    // width from the hand rail, capped so a tiny/huge rail never distorts the start.
+    const handCardW = hand ? clamp(hand.h / (88 / 63), baseW * 0.6, baseW * 1.1) : baseW * 0.92;
+    const fromScale = clamp(handCardW / baseW, 0.55, 1);
+
+    if (landsInSlot && dest) {
+      // SLOT LANDING — one continuous card on E's weighted arc: lift scaled by
+      // distance, banking toward velocity that levels out, a small spring
+      // overshoot, then it STAYS (endOpacity 1) and releaseDest reveals the real
+      // card as the clone is removed. The clone is measured against the inner
+      // .slot-card box (baseW = dest.w, baseH = dest.h) so it lands EXACTLY on the
+      // real card, and lands at destRotation (180 for the opponent active) so the
+      // reveal never flips. Opacity fades in over the first sliver, no launch pop.
+      const frames = weightedFlightCard(
+        { cx: origin.cx, cy: origin.cy, scale: fromScale },
+        { cx: dest.cx, cy: dest.cy, scale: 1 },
+        baseW,
+        baseH,
+        1,
+        total,
+        0,
+        destRotation,
+      );
+      frames[0] = { ...frames[0], opacity: 0 };
+      track(node.animate(frames, { duration: total, easing: EASE_ARC, fill: 'backwards' }), node, onFinish);
+      return;
+    }
+
+    // NO SLOT (trainers -> discard, or unresolved): ONE continuous weighted arc
+    // hand -> discard, structurally identical to the slot landing but ending at the
+    // discard pile and fading out — NO mid-screen read pose, NO dead stop, NO
+    // chained phases (the source of the "two actions / stop for a second" feel).
+    // The arc's mid-flight scale-up is the legibility beat. Glint/aura already ride
+    // on the node from decorateReveal(); the contact shadow rides the arc.
+    const discard = boxFor(`[data-testid="discard-pile-${intent.ownerIndex}"]`, overlay);
+    if (discard) {
+      // A trainer reads smaller in the discard than enlarged mid-flight; end near a
+      // card size (clamped) so it tucks into the pile rather than shrinking to dust.
+      const endScale = clamp(discard.w / baseW, 0.5, 1.0);
+      const frames = weightedFlightCard(
+        { cx: origin.cx, cy: origin.cy, scale: fromScale },
+        { cx: discard.cx, cy: discard.cy, scale: endScale },
+        baseW,
+        baseH,
+        0,
+        total,
+        0,
+      );
+      frames[0] = { ...frames[0], opacity: 0 };
+      track(node.animate(frames, { duration: total, easing: EASE_ARC, fill: 'backwards' }), node, onFinish);
+      return;
+    }
+
+    // No discard destination (unresolved card): a brief centre surface-and-fade in
+    // ONE short animation — rise a touch, enlarge modestly for legibility, fade out.
+    const surfaceScale = clamp(baseW * 1.4 / baseW, 1, heroScale);
     track(
       node.animate(
         [
-          { offset: 0, transform: frame(origin.cx, origin.cy, baseW, baseH, 0.92), opacity: 0, easing: EASE_OUT },
-          { offset: Math.min(0.12, r1 * 0.5), opacity: 1, easing: EASE_OUT },
-          { offset: r1, transform: frame(heroX, heroY, baseW, baseH, heroScale), opacity: 1, easing: 'linear' },
-          { offset: r2, transform: frame(heroX, heroY, baseW, baseH, heroScale), opacity: 1, easing: EASE_IN_OUT },
-          { offset: 0.9, transform: settle, opacity: 1, easing: 'linear' },
-          { offset: 1, transform: settle, opacity: endOpacity },
+          { offset: 0, transform: frame(origin.cx, origin.cy, baseW, baseH, fromScale), opacity: 0 },
+          { offset: 0.28, transform: frame(heroX, heroY, baseW, baseH, surfaceScale), opacity: 1 },
+          { offset: 0.72, transform: frame(heroX, heroY, baseW, baseH, surfaceScale), opacity: 1 },
+          { offset: 1, transform: frame(heroX, heroY - 8, baseW, baseH, surfaceScale * 0.97), opacity: 0 },
         ],
-        { duration: total, fill: 'backwards' },
+        { duration: total, easing: EASE_OUT, fill: 'backwards' },
       ),
       node,
-      releaseKey ? () => cardMotionStore.releaseDest(releaseKey) : undefined,
+      onFinish,
     );
   }
 
@@ -427,6 +861,8 @@
       for (const travel of batch.travels) {
         if (travel.kind === 'draw') {
           runDraw(travel, overlay, budgetMs, reduced);
+        } else if (travel.kind === 'prize') {
+          runPrize(travel, overlay, budgetMs, reduced);
         } else {
           runPlay(travel, overlay, budgetMs, reduced);
         }
@@ -454,6 +890,7 @@
 
   .motion-overlay :global(.motion-ghost),
   .motion-overlay :global(.motion-reveal),
+  .motion-overlay :global(.motion-contact-shadow),
   .motion-overlay :global(.fx-draw-trail),
   .motion-overlay :global(.fx-attack-beam),
   .motion-overlay :global(.fx-projectile),
@@ -467,9 +904,23 @@
     pointer-events: none;
   }
 
+  /* Contact shadow ported from prototype E's .flyer-shadow — a soft, blurred dark
+     ellipse on the ground plane beneath a flying clone. It grows as the card lifts
+     and shrinks as it lands, selling the elevation underneath the FX. Sits below
+     the clone (lower z-index) and is purely transform/opacity driven. */
+  .motion-overlay :global(.motion-contact-shadow) {
+    z-index: 1;
+    border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(23, 30, 38, 0.34), rgba(23, 30, 38, 0) 70%);
+    filter: blur(1px);
+    opacity: 0;
+  }
+
   .motion-overlay :global(.motion-ghost),
   .motion-overlay :global(.motion-reveal) {
     border-radius: 6px;
+    /* sit above the contact shadow (z-index 1) that rides beneath the flight */
+    z-index: 2;
   }
 
   .motion-overlay :global(.motion-ghost) {

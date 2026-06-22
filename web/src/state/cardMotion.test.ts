@@ -196,6 +196,36 @@ describe('deriveMotionIntents', () => {
     expect(play?.kind === 'play' && play.destSelector).toBeNull();
   });
 
+  it('derives a setup prize intent when prizes first appear (0/unknown -> m)', () => {
+    const prev = view([player(0, { prizesLeft: 0 }), player(1, { prizesLeft: 0 })], []);
+    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
+    const prizes = deriveMotionIntents(prev, next, []).travels.filter((t) => t.kind === 'prize');
+    expect(prizes).toHaveLength(2);
+    expect(prizes[0]).toMatchObject({ kind: 'prize', ownerIndex: 0, count: 6, mode: 'setup' });
+  });
+
+  it('derives a setup prize intent against a null previous view', () => {
+    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
+    const prizes = deriveMotionIntents(null, next, []).travels.filter((t) => t.kind === 'prize');
+    expect(prizes).toHaveLength(2);
+    expect(prizes.every((p) => p.kind === 'prize' && p.mode === 'setup')).toBe(true);
+  });
+
+  it('derives a take prize intent with the claimed count when prizesLeft drops', () => {
+    const prev = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 4 })], []);
+    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 2 })], []);
+    const prizes = deriveMotionIntents(prev, next, []).travels.filter((t) => t.kind === 'prize');
+    expect(prizes).toHaveLength(1);
+    expect(prizes[0]).toMatchObject({ kind: 'prize', ownerIndex: 1, count: 2, mode: 'take' });
+  });
+
+  it('emits no prize intent when prizesLeft is unchanged', () => {
+    const prev = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
+    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
+    const prizes = deriveMotionIntents(prev, next, []).travels.filter((t) => t.kind === 'prize');
+    expect(prizes).toHaveLength(0);
+  });
+
   it('orders draw intents before play reveals', () => {
     const played = card(150, 'Played');
     const next = view([player(0, { active: slot(0, 'active', 0, played) }), player(1)], []);
@@ -244,8 +274,13 @@ describe('planEligibility', () => {
 
   it('allows the full repertoire on a calm manual step', () => {
     const plan = planEligibility({ ...base, dir: 1, speedId: 'normal' });
-    expect(plan).toMatchObject({ attack: true, draw: true, reveal: true });
+    expect(plan).toMatchObject({ attack: true, draw: true, reveal: true, prize: true });
     expect(plan?.budgetMs).toBe(replayMotionBudgetMs('normal'));
+  });
+
+  it('suppresses prizes (with draws/reveals) on a rapid mash and during fast autoplay', () => {
+    expect(planEligibility({ ...base, dir: 1, speedId: 'normal', dt: 80 })).toMatchObject({ prize: false });
+    expect(planEligibility({ ...base, dir: 1, speedId: 'fast', playing: true, dt: 400 })).toMatchObject({ prize: false });
   });
 
   it('allows the full repertoire during normal autoplay', () => {

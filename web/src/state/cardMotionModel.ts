@@ -53,6 +53,13 @@ export type DrawIntent = {
   kind: 'draw';
   ownerIndex: number;
   count: number;
+  /** The drawn cards' artwork, in draw order, parallel to `count`. Lets the
+   *  overlay fly a FACE-UP clone for the bottom (face-up) owner that matches the
+   *  card landing in the hand — so the flight is one continuous object, not a
+   *  cardback ghost beside a separately-materialising face. Optional and purely
+   *  additive: `count` is unchanged (the coalescing tests lock it). Entries may
+   *  be null when the card's art can't be resolved (fall back to a cardback). */
+  cards?: (CardView | null)[];
 };
 
 export type PlayIntent = {
@@ -64,7 +71,19 @@ export type PlayIntent = {
   destSelector: string | null;
 };
 
-export type TravelIntent = DrawIntent | PlayIntent;
+/** A facedown prize-card travel, derived from the prizesLeft snapshot DELTA.
+ *  `setup` deals cards deck -> prize grid (they STAY); `take` lifts a claimed
+ *  prize grid -> hand. `count` is how many prizes moved this step; the overlay
+ *  caps the rendered flights to the 6-cell grid. Owner-keyed like DrawIntent. */
+export type PrizeIntent = {
+  id: string;
+  kind: 'prize';
+  ownerIndex: number;
+  count: number;
+  mode: 'setup' | 'take';
+};
+
+export type TravelIntent = DrawIntent | PlayIntent | PrizeIntent;
 
 export type MotionIntents = {
   attack: AttackIntent | null;
@@ -75,6 +94,7 @@ export type MotionEligibility = {
   attack: boolean;
   draw: boolean;
   reveal: boolean;
+  prize: boolean;
   budgetMs: number;
 };
 
@@ -177,8 +197,10 @@ export function deriveMotionIntents(
   }
 
   let attack: AttackIntent | null = null;
-  // Map keeps first-insertion order, so it doubles as the draw ordering.
-  const draws = new Map<number, { count: number; firstIndex: number }>();
+  // Map keeps first-insertion order, so it doubles as the draw ordering. `cards`
+  // collects the resolved art per drawn card (in draw order) without touching the
+  // locked `count`.
+  const draws = new Map<number, { count: number; firstIndex: number; cards: (CardView | null)[] }>();
   const plays: TravelIntent[] = [];
 
   delta.forEach((log, index) => {
@@ -202,11 +224,21 @@ export function deriveMotionIntents(
       return;
     }
     if (log.type === 'Draw' && typeof log.playerIndex === 'number') {
-      const existing = draws.get(log.playerIndex);
+      // Resolve the drawn card's art so the face-up flight matches what lands.
+      // CardView.id is a species id (right artwork, instance irrelevant for a
+      // cinematic); a missing cardId or unfound art yields null (cardback fallback).
+      const owner = log.playerIndex;
+      const drawnCard =
+        typeof log.cardId === 'number'
+          ? (nextView.players[owner] ? findCardById(nextView.players[owner], log.cardId) : null) ??
+            findCardAnywhere(nextView, log.cardId)
+          : null;
+      const existing = draws.get(owner);
       if (existing) {
         existing.count += 1;
+        existing.cards.push(drawnCard);
       } else {
-        draws.set(log.playerIndex, { count: 1, firstIndex: index });
+        draws.set(owner, { count: 1, firstIndex: index, cards: [drawnCard] });
       }
       return;
     }
@@ -230,9 +262,41 @@ export function deriveMotionIntents(
     kind: 'draw',
     ownerIndex: owner,
     count: entry.count,
+    cards: entry.cards,
   }));
 
-  return { attack, travels: [...drawTravels, ...plays] };
+  // Prizes from the prizesLeft snapshot DELTA per owner (robust — no log-area
+  // bookkeeping). prizesLeft RISING from 0/unknown is a setup deal-out; FALLING
+  // is a claim. We deliberately ignore the MoveCard logs here so a single source
+  // of truth (the count) drives both cinematics and they can never double-fire.
+  const prizeTravels = derivePrizeTravels(prevView, nextView);
+
+  return { attack, travels: [...drawTravels, ...prizeTravels, ...plays] };
+}
+
+/** Per-owner prize travels from the prizesLeft snapshot delta. Setup fires once,
+ *  when prizes first appear (prev 0/undefined -> m>0); take fires when the count
+ *  drops by n>0. Pure: reads only the two views' counts. */
+function derivePrizeTravels(prevView: GameView | null, nextView: GameView): TravelIntent[] {
+  const travels: TravelIntent[] = [];
+  nextView.players.forEach((nextPlayer, owner) => {
+    const next = nextPlayer.prizesLeft;
+    if (typeof next !== 'number') {
+      return;
+    }
+    const prev = prevView?.players[owner]?.prizesLeft;
+    const prevCount = typeof prev === 'number' ? prev : 0;
+    if (prevCount <= 0 && next > 0) {
+      // Prizes appeared: deal them out from the deck onto the grid (they STAY).
+      travels.push({ id: `prize-setup-${owner}`, kind: 'prize', ownerIndex: owner, count: next, mode: 'setup' });
+      return;
+    }
+    const taken = prevCount - next;
+    if (taken > 0) {
+      travels.push({ id: `prize-take-${owner}`, kind: 'prize', ownerIndex: owner, count: taken, mode: 'take' });
+    }
+  });
+  return travels;
 }
 
 /**
@@ -263,12 +327,13 @@ export function planEligibility(args: {
   const budgetMs = replayMotionBudgetMs(speedId);
   // Mashing the step key (paused) outruns any cadence — clip to attack only.
   if (dt < RAPID_STEP_MS) {
-    return { attack: true, draw: false, reveal: false, budgetMs: Math.min(budgetMs, RAPID_STEP_MOTION_BUDGET_MS) };
+    return { attack: true, draw: false, reveal: false, prize: false, budgetMs: Math.min(budgetMs, RAPID_STEP_MOTION_BUDGET_MS) };
   }
   // Fast autoplay: only the short in-place attack fits.
   if (playing && speedId === 'fast') {
-    return { attack: true, draw: false, reveal: false, budgetMs };
+    return { attack: true, draw: false, reveal: false, prize: false, budgetMs };
   }
-  // Normal / slow autoplay, or any calm manual step: the full repertoire.
-  return { attack: true, draw: true, reveal: true, budgetMs };
+  // Normal / slow autoplay, or any calm manual step: the full repertoire (prizes
+  // ride the same gate as draws/reveals — one forward step, never on turbo).
+  return { attack: true, draw: true, reveal: true, prize: true, budgetMs };
 }

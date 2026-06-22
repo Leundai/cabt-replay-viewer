@@ -66,9 +66,9 @@
         {/if}
         <span class="pile-count">{topPlayer.lostZone.length}</span>
       </button>
-      <div class="prize-grid" title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`}>
+      <div class="prize-grid" data-testid={`prize-grid-${topPlayer.index}`} title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`}>
         {#each visiblePrizeCards(topPlayer.prizesLeft) as index}
-          <span style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+          <span data-testid={`prize-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
         {/each}
       </div>
     </div>
@@ -116,9 +116,9 @@
         {/if}
         <span class="pile-count">{bottomPlayer.lostZone.length}</span>
       </button>
-      <div class="prize-grid" title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`}>
+      <div class="prize-grid" data-testid={`prize-grid-${bottomPlayer.index}`} title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`}>
         {#each visiblePrizeCards(bottomPlayer.prizesLeft) as index}
-          <span style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+          <span data-testid={`prize-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
         {/each}
       </div>
     </div>

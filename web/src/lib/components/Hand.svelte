@@ -1,6 +1,10 @@
 <script lang="ts">
+  import { flip } from 'svelte/animate';
   import CardTile from './CardTile.svelte';
   import type { PlayerView } from '../game/types';
+  import { easeSettle, flipReflowMs, handEnter } from '../motion';
+  import { replayStore } from '../../state/replay.svelte';
+  import { cardMotionStore } from '../../state/cardMotion.svelte';
 
   type Props = {
     player: PlayerView;
@@ -13,6 +17,44 @@
     disabled = false,
     concealed = false,
   }: Props = $props();
+
+  // The hand renders in NATURAL (snapshot/draw) order — no auto-sort. Sorting was
+  // dropped deliberately: it reshuffled the hand every step (churn) and moved a
+  // freshly-drawn card away from the trailing slot its flight clone targets, which
+  // made the wrong card reveal. Natural order keeps the newest cards LAST, so the
+  // draw/claim hand-off lands on exactly the right card.
+
+  // Stable per-instance keys so the FLIP reflow tracks each card across a step.
+  // CardView has no instance id (only a species id), so we disambiguate repeats
+  // by occurrence order — unique within the hand, stable for the common case of
+  // distinct cards (the gravity that matters when a middle card leaves).
+  let handCards = $derived.by(() => {
+    const seen = new Map<string, number>();
+    const list = player.hand.map((card) => {
+      const base = String(card.id ?? card.fullName ?? card.name ?? 'card');
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      return { card, key: `${base}#${n}` };
+    });
+    return list;
+  });
+
+  // One-continuous-card draw hand-off: while a deck→hand draw clone is in flight,
+  // the store suppresses the freshly-drawn cards so the flight is their sole
+  // entrance (mirrors prototype E). Drawn cards append to the end, so the newest
+  // are the LAST N in DOM order — we mark exactly that many trailing cards
+  // hidden + skip their handEnter. Only the face-up (non-concealed) hand hands off;
+  // the opponent's facedown fan keeps the overlay's cardback ghost as before.
+  let suppressedTail = $derived(concealed ? 0 : cardMotionStore.suppressedHandCount(player.index));
+  let activeBudgetMs = $derived(cardMotionStore.activeBudgetMs);
+  function isSuppressed(index: number): boolean {
+    // Never hide more cards than are actually rendered: if the suppressed count
+    // ever exceeds the hand (a prize-take count beyond the new face-up cards, or a
+    // draw measured before the DOM grew), an unclamped threshold goes negative and
+    // hides EVERY card. Clamp so only real trailing cards are ever suppressed.
+    const tail = Math.min(suppressedTail, handCards.length);
+    return tail > 0 && index >= handCards.length - tail;
+  }
 
   let handElement = $state<HTMLDivElement>();
   let canScrollLeft = $state(false);
@@ -56,15 +98,40 @@
   data-card-count={player.hand.length}
   onscroll={updateScrollIndicators}
 >
-  {#each player.hand as card, index}
-    <CardTile
-      {card}
-      compact
-      disabled={disabled}
-      faceDown={concealed}
-      testId={`hand-card-${player.index}-${index}`}
-    />
-  {/each}
+  {#if concealed}
+    {#each handCards as item, index (item.key)}
+      <CardTile
+        card={item.card}
+        compact
+        disabled={disabled}
+        faceDown
+        testId={`hand-card-${player.index}-${index}`}
+      />
+    {/each}
+  {:else}
+    {#each handCards as item, index (item.key)}
+      <div
+        class="hand-card"
+        style:visibility={isSuppressed(index) ? 'hidden' : null}
+        in:handEnter={{
+          speedId: replayStore.playbackSpeedId,
+          budgetMs: activeBudgetMs,
+          skip: isSuppressed(index),
+        }}
+        animate:flip={{
+          duration: flipReflowMs(replayStore.playbackSpeedId, activeBudgetMs),
+          easing: easeSettle,
+        }}
+      >
+        <CardTile
+          card={item.card}
+          compact
+          disabled={disabled}
+          testId={`hand-card-${player.index}-${index}`}
+        />
+      </div>
+    {/each}
+  {/if}
 </div>
 
 <style>
@@ -114,6 +181,14 @@
     content: '';
     pointer-events: none;
     flex: 1 0 0;
+  }
+
+  /* The keyed wrapper is the flex item that the FLIP reflow animates; the card
+     tile inside keeps its own hover-lift transform, so the two never fight. */
+  .hand:not(.concealed) .hand-card {
+    flex: 0 0 auto;
+    display: block;
+    will-change: transform;
   }
 
   .hand:not(.concealed) :global(.card-tile) {

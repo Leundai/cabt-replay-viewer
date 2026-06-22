@@ -14,6 +14,7 @@ export type {
   AttackIntent,
   DrawIntent,
   PlayIntent,
+  PrizeIntent,
   TravelIntent,
 } from './cardMotionModel';
 
@@ -48,17 +49,53 @@ class CardMotionStore {
    *  there is never a one-frame flash) and released as each clone lands. */
   readonly suppressedDests = new SvelteSet<string>();
 
+  /** Hand-card landing keys (`hand-{owner}-{i}`) whose real card is hidden while
+   *  its deck→hand draw clone is in flight. The mirror of suppressedDests for the
+   *  draw hand-off: the flight IS the card's entrance, so the real sorted hand
+   *  card stays hidden (and skips its handEnter) until the clone lands on it —
+   *  one continuous card, exactly like prototype E's flyFromTo. */
+  readonly suppressedHand = new SvelteSet<string>();
+
+  /** How many freshly-drawn cards owner `owner` is still hand-off-suppressing.
+   *  Hand marks its LAST N sorted cards hidden (draws append then sort, so the
+   *  newest cards are the trailing ones once sorted). Reactive (reads the set). */
+  suppressedHandCount(owner: number): number {
+    let n = 0;
+    for (const key of this.suppressedHand) {
+      if (key.startsWith(`hand-${owner}-`)) {
+        n += 1;
+      }
+    }
+    return n;
+  }
+
   #batchSeq = 0;
   #lastStepAt = 0;
   #clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** The active batch's motion budget, exposed so the hand reflow / entrance can
+   *  share the same clock the overlay plans the flight against (so the hand
+   *  expands WITH the arrival, not 280ms before it). 0 when no batch is live. */
+  get activeBudgetMs(): number {
+    return this.batch?.budgetMs ?? 0;
+  }
 
   isSuppressed(key: string): boolean {
     return this.suppressedDests.has(key);
   }
 
+  isHandSuppressed(key: string): boolean {
+    return this.suppressedHand.has(key);
+  }
+
   /** Reveal a landed card — called by the overlay when its clone settles. */
   releaseDest(key: string): void {
     this.suppressedDests.delete(key);
+  }
+
+  /** Reveal a landed hand card — called by the overlay when its draw clone lands. */
+  releaseDrawHand(key: string): void {
+    this.suppressedHand.delete(key);
   }
 
   /** Plan and (maybe) publish a motion batch for a step transition. */
@@ -90,9 +127,15 @@ class CardMotionStore {
     const delta = logDelta(args.prevView, args.nextView);
     const { attack, travels } = deriveMotionIntents(args.prevView, args.nextView, delta);
 
-    const allowedTravels = travels.filter((travel) =>
-      travel.kind === 'draw' ? eligibility.draw : eligibility.reveal,
-    );
+    const allowedTravels = travels.filter((travel) => {
+      if (travel.kind === 'draw') {
+        return eligibility.draw;
+      }
+      if (travel.kind === 'prize') {
+        return eligibility.prize;
+      }
+      return eligibility.reveal;
+    });
     const allowedAttack = eligibility.attack ? attack : null;
 
     if (!allowedAttack && allowedTravels.length === 0) {
@@ -121,15 +164,31 @@ class CardMotionStore {
     }
     this.batch = batch;
 
-    // Re-seed suppressed destinations for this batch. Clearing first releases any
-    // card still hidden by a superseded batch, so nothing can get stuck invisible.
+    // Re-seed suppression for this batch. Clearing first releases any card still
+    // hidden by a superseded batch, so nothing can ever get stuck invisible.
     this.suppressedDests.clear();
+    this.suppressedHand.clear();
+    // The overlay caps draw + prize-take flights to 7 / 6 respectively; suppress
+    // the same count so a hidden hand card always has a clone coming for it.
+    const DRAW_CAP = 7;
+    const PRIZE_CAP = 6;
     if (batch && !batch.reduced) {
       for (const travel of batch.travels) {
         // Only cards that actually land in a slot are hidden; a reveal that fades
         // at centre (no slot dest) has no real card to hand off to.
         if (travel.kind === 'play' && travel.destSelector?.startsWith('slot-')) {
           this.suppressedDests.add(travel.destSelector);
+        } else if (travel.kind === 'draw') {
+          const n = Math.min(travel.count, DRAW_CAP);
+          for (let i = 0; i < n; i += 1) {
+            this.suppressedHand.add(`hand-${travel.ownerIndex}-${i}`);
+          }
+        } else if (travel.kind === 'prize' && travel.mode === 'take') {
+          // Prize-take hands off into the claiming owner's hand like a draw.
+          const n = Math.min(travel.count, PRIZE_CAP);
+          for (let i = 0; i < n; i += 1) {
+            this.suppressedHand.add(`hand-${travel.ownerIndex}-${i}`);
+          }
         }
       }
     }
@@ -141,6 +200,7 @@ class CardMotionStore {
       this.#clearTimer = setTimeout(() => {
         this.batch = null;
         this.suppressedDests.clear();
+        this.suppressedHand.clear();
         this.#clearTimer = null;
       }, batch.budgetMs + 220);
     }
