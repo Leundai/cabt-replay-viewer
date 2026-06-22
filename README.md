@@ -86,15 +86,16 @@ admin access unless `CABT_ALLOW_PUBLIC_IMPORTS=true` is set for local
 development; that flag does not unlock admin Kaggle endpoints.
 
 The public leaderboard panel reads from a server-side cache. The viewer polls
-the cache, and the backend refreshes from Kaggle only when the cached snapshot
-is stale. The default cache window is 10 minutes:
+the persisted cache without mutating it; a Kaggle pull only happens through the
+admin "Refresh cache" action or an explicit API request with `refresh=true`.
+The default cache window is 10 minutes:
 
 ```bash
 KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
 KAGGLE_LEADERBOARD_CACHE_SECONDS=600
 KAGGLE_LEADERBOARD_PAGE_SIZE=50
 KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
-KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=1
+KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=2
 KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=5
 KAGGLE_LEADERBOARD_RATE_PAUSE_AFTER_CALLS=55
 KAGGLE_LEADERBOARD_RATE_PAUSE_SECONDS=65
@@ -102,11 +103,13 @@ KAGGLE_LEADERBOARD_RATE_PAUSE_SECONDS=65
 
 Leaderboard refreshes also cache recent public submissions and episode IDs for
 the top 50 teams by default. Public replay clicks are allowed only for episode
-IDs already present in that cached leaderboard snapshot. The enrichment limits
-and pause settings above keep the pull batch bounded and avoid Kaggle 429s. The
-episode limit stores multiple recent matchups from each already-fetched
-submission response; raising the submission limit is what increases Kaggle call
-volume. Set the team limit to `0` to cache standings only.
+IDs already present in that cached leaderboard snapshot. The cache can be
+marked stale after the TTL expires, but it remains visible until an explicit
+refresh replaces it. The enrichment limits and pause settings above keep the
+pull batch bounded and avoid Kaggle 429s. The episode limit stores multiple
+recent matchups from each already-fetched submission response; raising the
+submission limit is what increases Kaggle call volume. Set the team limit to
+`0` to cache standings only.
 
 Saved replay artifacts are publicly readable from the hosted replay library. Use
 local JSON drag/drop for private inspection, and only save/import replays that
@@ -126,15 +129,15 @@ KAGGLE_KEY
 KAGGLE_DEFAULT_COMPETITION=pokemon-tcg-ai-battle
 KAGGLE_LEADERBOARD_CACHE_SECONDS=600
 KAGGLE_LEADERBOARD_TEAM_SUBMISSION_LIMIT=50
-KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=1
+KAGGLE_LEADERBOARD_SUBMISSIONS_PER_TEAM=2
 KAGGLE_LEADERBOARD_EPISODES_PER_SUBMISSION=5
 KAGGLE_LEADERBOARD_RATE_PAUSE_AFTER_CALLS=55
 KAGGLE_LEADERBOARD_RATE_PAUSE_SECONDS=65
 ```
 
-Attach a Railway volume mounted at `/data` so imported replays survive
-redeploys. Without a volume the service still runs, but the replay library is
-ephemeral.
+Attach a Railway volume mounted at `/data` so imported replays and the Kaggle
+leaderboard cache survive redeploys. Without a volume the service still runs,
+but the replay library and warmed leaderboard cache are ephemeral.
 
 The backend rejects replay payloads over `CABT_MAX_REPLAY_BYTES` (25 MB by
 default) and keeps at most `CABT_MAX_STORED_REPLAYS` artifacts (500 by default)

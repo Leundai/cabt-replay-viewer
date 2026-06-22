@@ -64,6 +64,8 @@
   let selectedSubmissionId = $state<number | null>(null);
   let kaggleLoading = $state(false);
   let kaggleError = $state('');
+  let staleLeaderboardRefreshInFlight = false;
+  let lastStaleLeaderboardRefreshAt = 0;
 
   let filteredSubmissions = $derived(filterSubmissions(submissions, searchQuery));
   let filteredLeaderboard = $derived(filterLeaderboard(leaderboard?.entries ?? [], searchQuery));
@@ -72,8 +74,8 @@
   onMount(() => {
     void refreshLibrary();
     void refreshKaggleStatus();
-    void refreshLeaderboard();
-    const leaderboardTimer = setInterval(() => void refreshLeaderboard(), 60_000);
+    void loadLeaderboard();
+    const leaderboardTimer = setInterval(() => void loadLeaderboard(), 60_000);
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyK') {
         event.preventDefault();
@@ -124,15 +126,40 @@
     }
   }
 
-  async function refreshLeaderboard() {
+  async function loadLeaderboard() {
     leaderboardLoading = !leaderboard;
     leaderboardError = '';
     try {
-      leaderboard = await getKaggleLeaderboard(competition.trim() || defaultCompetition);
+      const snapshot = await getKaggleLeaderboard(competition.trim() || defaultCompetition);
+      leaderboard = snapshot;
+      if (snapshot.stale) {
+        void refreshStaleLeaderboard(snapshot.competition);
+      }
     } catch (error) {
       leaderboardError = error instanceof Error ? error.message : String(error);
     } finally {
       leaderboardLoading = false;
+    }
+  }
+
+  async function refreshStaleLeaderboard(competitionId: string) {
+    const now = Date.now();
+    if (staleLeaderboardRefreshInFlight || now - lastStaleLeaderboardRefreshAt < 60_000) {
+      return;
+    }
+    staleLeaderboardRefreshInFlight = true;
+    lastStaleLeaderboardRefreshAt = now;
+    try {
+      const refreshed = await getKaggleLeaderboard(competitionId, { refresh: true });
+      if ((leaderboard?.competition || competition.trim() || defaultCompetition) === refreshed.competition) {
+        leaderboard = refreshed;
+      }
+    } catch (error) {
+      if (!leaderboard) {
+        leaderboardError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      staleLeaderboardRefreshInFlight = false;
     }
   }
 
@@ -332,8 +359,16 @@
     return `${submissionCount} ${submissionLabel} - ${replayCount} ${replayLabel}`;
   }
 
-  function formatSubmissionMeta(submission: KaggleSubmission): string {
+  function isLeaderboardSubmission(entry: KaggleLeaderboardEntry, submission: KaggleSubmission): boolean {
+    if (entry.submissionId !== undefined && entry.submissionId !== null) {
+      return submission.id === entry.submissionId;
+    }
+    return Boolean(entry.submissionDate && submission.date === entry.submissionDate);
+  }
+
+  function formatSubmissionMeta(submission: KaggleSubmission, entry: KaggleLeaderboardEntry): string {
     return [
+      isLeaderboardSubmission(entry, submission) ? 'Leaderboard run' : '',
       submission.score !== undefined && submission.score !== null ? `Score ${submission.score}` : '',
       formatDate(submission.date),
       submission.status,
@@ -488,8 +523,8 @@
   <section class="source-panel leaderboard-panel">
     <div class="panel-heading">
       <strong>Leaderboard</strong>
-      <button type="button" disabled={leaderboardLoading} onclick={refreshLeaderboard}>
-        {leaderboardLoading ? 'Refreshing' : 'Refresh'}
+      <button type="button" disabled={leaderboardLoading} onclick={loadLeaderboard}>
+        {leaderboardLoading ? 'Loading' : 'Reload'}
       </button>
     </div>
     <div class="cache-line">
@@ -527,7 +562,7 @@
                   <div class="leaderboard-submission">
                     <span class="submission-summary">
                       <strong>Submission #{submission.id}</strong>
-                      <small>{formatSubmissionMeta(submission)}</small>
+                      <small>{formatSubmissionMeta(submission, entry)}</small>
                     </span>
                     {#if submission.episodes?.length}
                       {#if submission.episodes.length === 1}

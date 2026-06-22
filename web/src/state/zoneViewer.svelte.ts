@@ -1,3 +1,9 @@
+import {
+  cardsForPokemonSlot,
+  resolveSlotSelection,
+  slotInspectionTitle,
+  type SlotSelection,
+} from '../lib/game/slotInspection';
 import type { CardView, GameView } from '../lib/game/types';
 
 export type ZoneName = 'discard' | 'lostZone' | 'stadium' | 'playZone';
@@ -9,15 +15,19 @@ type OpenZone = {
   faceDown?: boolean;
 };
 
+type OpenSlot = SlotSelection & {
+  faceDown?: boolean;
+};
+
 class ZoneViewerStore {
-  openZone = $state<OpenZone | null>(null);
+  openZone = $state<OpenZone | OpenSlot | null>(null);
 
   get open() {
     return !!this.openZone;
   }
 
   get title() {
-    return this.openZone?.title ?? '';
+    return this.openZone && 'title' in this.openZone ? this.openZone.title : '';
   }
 
   get faceDown() {
@@ -25,19 +35,41 @@ class ZoneViewerStore {
   }
 
   get zone() {
-    return this.openZone?.zone;
+    return this.openZone && 'zone' in this.openZone ? this.openZone.zone : undefined;
   }
 
   show(playerIndex: number, zone: ZoneName, title: string, faceDown = false) {
     this.openZone = { playerIndex, zone, title, faceDown };
   }
 
+  showSlot(selection: SlotSelection, faceDown = false) {
+    this.openZone = { ...selection, faceDown };
+  }
+
   close() {
     this.openZone = null;
   }
 
+  titleFor(game: GameView | null | undefined): string {
+    if (!this.openZone) {
+      return '';
+    }
+    if ('title' in this.openZone) {
+      return this.openZone.title;
+    }
+    const resolved = 'slotIndex' in this.openZone ? resolveSlotSelection(game, this.openZone) : null;
+    return resolved ? slotInspectionTitle(resolved.player, resolved.slot) : '';
+  }
+
   cardsFor(game: GameView | null | undefined): CardView[] {
-    return this.openZone && game
+    if (!this.openZone) {
+      return [];
+    }
+    if ('slotIndex' in this.openZone) {
+      const resolved = resolveSlotSelection(game, this.openZone);
+      return resolved ? cardsForPokemonSlot(resolved.slot) : [];
+    }
+    return game
       ? (game.players[this.openZone.playerIndex]?.[this.openZone.zone] ?? [])
       : [];
   }

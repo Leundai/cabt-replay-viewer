@@ -1,5 +1,6 @@
 <script lang="ts">
   import CardTile from './CardTile.svelte';
+  import { visiblePrizeSlots } from '../game/prizeZone';
   import type { PlayerView } from '../game/types';
 
   type Props = {
@@ -44,10 +45,6 @@
     return Array.from({ length: count }, (_, index) => count - index);
   }
 
-  function visiblePrizeCards(prizesLeft: number) {
-    const count = Math.min(6, Math.max(0, Math.round(prizesLeft)));
-    return Array.from({ length: count }, (_, index) => index);
-  }
 </script>
 
 <div class="center-stack">
@@ -58,18 +55,22 @@
         class="stack-pile lost-pile"
         class:projected-hover={projectedHoverPile === 'top-lost'}
         title={`${topPlayer.name} lost zone`}
+        aria-label={`${topPlayer.name} lost zone, ${topPlayer.lostZone.length} card${topPlayer.lostZone.length === 1 ? '' : 's'}`}
         bind:this={topLostPileElement}
         onclick={() => showLostZone(topPlayer)}
       >
         {#if topPlayer.lostZone.length}
-          <CardTile card={topPlayer.lostZone[topPlayer.lostZone.length - 1]} compact />
+          <CardTile card={topPlayer.lostZone[topPlayer.lostZone.length - 1]} compact inspectable={false} />
         {/if}
         <span class="pile-count">{topPlayer.lostZone.length}</span>
       </button>
-      <div class="prize-grid" data-testid={`prize-grid-${topPlayer.index}`} title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`}>
-        {#each visiblePrizeCards(topPlayer.prizesLeft) as index}
-          <span data-testid={`prize-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
-        {/each}
+      <div class="prize-stack" title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`} data-testid={`prize-stack-${topPlayer.index}`}>
+        <div class="prize-grid" aria-hidden="true">
+          {#each visiblePrizeSlots(topPlayer.prizes) as index}
+            <span class="prize-card" data-testid={`prize-card-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+          {/each}
+        </div>
+        <span class="prize-count">{topPlayer.prizes.remaining}</span>
       </div>
     </div>
     <div class="right-field">
@@ -89,11 +90,12 @@
           class:projected-hover={projectedHoverPile === 'top-discard'}
           data-testid={`discard-pile-${topPlayer.index}`}
           title={`${topPlayer.name} discard`}
+          aria-label={`${topPlayer.name} discard pile, ${topPlayer.discard.length} card${topPlayer.discard.length === 1 ? '' : 's'}`}
           bind:this={topDiscardPileElement}
           onclick={() => showDiscard(topPlayer)}
         >
           {#if topPlayer.discard.length}
-            <CardTile card={topPlayer.discard[topPlayer.discard.length - 1]} compact />
+            <CardTile card={topPlayer.discard[topPlayer.discard.length - 1]} compact inspectable={false} />
           {/if}
           <span class="pile-count">{topPlayer.discard.length}</span>
         </button>
@@ -108,18 +110,22 @@
         class="stack-pile lost-pile"
         class:projected-hover={projectedHoverPile === 'bottom-lost'}
         title={`${bottomPlayer.name} lost zone`}
+        aria-label={`${bottomPlayer.name} lost zone, ${bottomPlayer.lostZone.length} card${bottomPlayer.lostZone.length === 1 ? '' : 's'}`}
         bind:this={bottomLostPileElement}
         onclick={() => showLostZone(bottomPlayer)}
       >
         {#if bottomPlayer.lostZone.length}
-          <CardTile card={bottomPlayer.lostZone[bottomPlayer.lostZone.length - 1]} compact />
+          <CardTile card={bottomPlayer.lostZone[bottomPlayer.lostZone.length - 1]} compact inspectable={false} />
         {/if}
         <span class="pile-count">{bottomPlayer.lostZone.length}</span>
       </button>
-      <div class="prize-grid" data-testid={`prize-grid-${bottomPlayer.index}`} title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`}>
-        {#each visiblePrizeCards(bottomPlayer.prizesLeft) as index}
-          <span data-testid={`prize-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
-        {/each}
+      <div class="prize-stack" title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`} data-testid={`prize-stack-${bottomPlayer.index}`}>
+        <div class="prize-grid" aria-hidden="true">
+          {#each visiblePrizeSlots(bottomPlayer.prizes) as index}
+            <span class="prize-card" data-testid={`prize-card-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}></span>
+          {/each}
+        </div>
+        <span class="prize-count">{bottomPlayer.prizes.remaining}</span>
       </div>
     </div>
     <div class="right-field">
@@ -139,11 +145,12 @@
           class:projected-hover={projectedHoverPile === 'bottom-discard'}
           data-testid={`discard-pile-${bottomPlayer.index}`}
           title={`${bottomPlayer.name} discard`}
+          aria-label={`${bottomPlayer.name} discard pile, ${bottomPlayer.discard.length} card${bottomPlayer.discard.length === 1 ? '' : 's'}`}
           bind:this={bottomDiscardPileElement}
           onclick={() => showDiscard(bottomPlayer)}
         >
           {#if bottomPlayer.discard.length}
-            <CardTile card={bottomPlayer.discard[bottomPlayer.discard.length - 1]} compact />
+            <CardTile card={bottomPlayer.discard[bottomPlayer.discard.length - 1]} compact inspectable={false} />
           {/if}
           <span class="pile-count">{bottomPlayer.discard.length}</span>
         </button>
@@ -275,7 +282,8 @@
   }
 
   button.stack-pile {
-    pointer-events: none;
+    cursor: pointer;
+    pointer-events: auto;
   }
 
   .deck-pile {
@@ -401,31 +409,57 @@
     transform: rotate(-90deg);
   }
 
-  .prize-grid {
+  .prize-stack {
     position: relative;
+    display: grid;
+    place-items: center;
     width: calc(var(--prize-card-w) * 1.98);
     height: calc((var(--prize-card-w) * 1.397) + (var(--prize-card-w) * 1.42));
     pointer-events: none;
   }
 
-  :global(.debug-zones) .prize-grid {
+  :global(.debug-zones) .prize-stack {
     outline: 2px solid rgba(250, 204, 21, 0.9);
     outline-offset: 4px;
     background: rgba(250, 204, 21, 0.08);
   }
 
-  .prize-grid span {
+  .prize-grid {
+    position: absolute;
+    inset: 0;
+  }
+
+  .prize-card {
     position: absolute;
     left: calc(var(--col) * var(--prize-card-w) * 0.98);
     top: calc(var(--row) * var(--prize-card-w) * 0.71);
     width: var(--prize-card-w);
     aspect-ratio: 63 / 88;
     border-radius: 4px;
-    border: 1px solid var(--prize-border);
+    border: 1px solid color-mix(in srgb, var(--prize-border) 82%, white);
     background:
       var(--cardback-shade),
       url("/assets/cardback.png") center / cover no-repeat;
-    box-shadow: 0 3px 8px rgba(23, 30, 38, 0.16);
+    box-shadow:
+      0 3px 8px rgba(23, 30, 38, 0.22),
+      0 0 0 1px rgba(255, 255, 255, 0.18);
+  }
+
+  .prize-count {
+    position: relative;
+    z-index: 3;
+    min-width: calc(var(--prize-card-w) * 0.45);
+    min-height: calc(var(--prize-card-w) * 0.45);
+    display: grid;
+    place-items: center;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--pile-count-border);
+    background: var(--pile-count-bg);
+    color: var(--pile-count-text);
+    box-shadow: 0 3px 10px rgba(23, 30, 38, 0.18);
+    font-size: calc(var(--prize-card-w) * 0.22);
+    font-weight: 900;
   }
 
 </style>

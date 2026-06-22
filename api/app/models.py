@@ -63,6 +63,7 @@ class KaggleSubmission(BaseModel):
 class KaggleLeaderboardEntry(BaseModel):
     rank: int
     teamId: int | None = None
+    submissionId: int | None = None
     teamName: str
     score: str | float | None = None
     submissionDate: str | None = None

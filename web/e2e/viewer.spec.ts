@@ -30,6 +30,7 @@ const leaderboardSnapshot = {
       teamId: 16376775,
       teamName: 'TrustHub hiroingk',
       score: '1307.9',
+      submissionId: 111,
       submissionDate: '2026-06-18T08:20:23.220Z',
       submissions: [
         {
@@ -71,6 +72,27 @@ const leaderboardSnapshot = {
               agents: [
                 { submissionId: 111, teamId: 16376775, teamName: 'TrustHub hiroingk', reward: '1' },
                 { submissionId: 444, teamId: 16394000, teamName: 'Kazama', reward: '-1' },
+              ],
+            },
+          ],
+        },
+        {
+          id: 110,
+          teamId: 16376775,
+          teamName: 'TrustHub hiroingk',
+          score: '1294.4',
+          status: 'complete',
+          date: '2026-06-17T08:20:23.220Z',
+          episodes: [
+            {
+              id: 8999,
+              submissionId: 110,
+              competitionName: 'pokemon-tcg-ai-battle',
+              reward: '-1',
+              status: 'complete',
+              agents: [
+                { submissionId: 110, teamId: 16376775, teamName: 'TrustHub hiroingk', reward: '-1' },
+                { submissionId: 555, teamId: 16378170, teamName: 'The Debauchery Tea Party', reward: '1' },
               ],
             },
           ],
@@ -338,6 +360,8 @@ test('Implicit sample replay loads and advances with playback controls', async (
   await expect(page.getByText('CABT Replay Viewer')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Demo' })).toHaveCount(0);
   await expect(page.getByTestId('game-status')).toContainText('Kazama Yusuke vs Leundai');
+  await expect(page.locator('[data-testid^="prize-card-0-"]')).toHaveCount(6);
+  await expect(page.locator('[data-testid^="prize-card-1-"]')).toHaveCount(6);
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
   await expect(page.getByLabel('Action step')).toHaveValue('0');
 
@@ -345,6 +369,133 @@ test('Implicit sample replay loads and advances with playback controls', async (
   await page.getByLabel('Replay speed').selectOption('turbo');
   await page.getByRole('button', { name: 'Play replay' }).click();
   await expect.poll(async () => Number(await step.inputValue())).toBeGreaterThanOrEqual(2);
+});
+
+test('Resting replay HUD keeps the matchup and action caption visible', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/');
+
+  const step = page.getByLabel('Action step');
+  await page.getByLabel('Replay speed').selectOption('turbo');
+  await page.getByRole('button', { name: 'Play replay' }).click();
+  await expect.poll(async () => Number(await step.inputValue())).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () =>
+    page.locator('.viewer-stage').evaluate((node) => node.classList.contains('chrome-resting')),
+  ).toBe(true);
+  await expect.poll(async () =>
+    page.evaluate(() => getComputedStyle(document.querySelector('.replay-controls')!).opacity),
+  ).toBe('0');
+
+  const hudOpacity = await page.evaluate(() => {
+    const opacityFor = (selector: string) => getComputedStyle(document.querySelector(selector)!).opacity;
+    return {
+      caption: opacityFor('.replay-caption'),
+      controls: opacityFor('.replay-controls'),
+      settings: opacityFor('.hud-settings'),
+      status: opacityFor('[data-testid="game-status"]'),
+    };
+  });
+
+  expect(hudOpacity.status).toBe('1');
+  expect(hudOpacity.caption).toBe('1');
+  expect(hudOpacity.controls).toBe('0');
+  expect(hudOpacity.settings).toBe('0');
+});
+
+test('Prize cards render as visible face-down cards', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/?replayId=upload-cabt-match');
+  await page.getByRole('button', { name: 'Pause replay' }).click();
+  await page.getByLabel('Action step').fill('6');
+
+  await expect(page.getByTestId('prize-stack-0')).toBeVisible();
+  await expect(page.getByTestId('prize-stack-1')).toBeVisible();
+  await expect(page.locator('[data-testid^="prize-card-0-"]')).toHaveCount(6);
+  await expect(page.locator('[data-testid^="prize-card-1-"]')).toHaveCount(6);
+});
+
+test('Opponent bench Pokemon opens the slot viewer', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/?replayId=upload-cabt-match');
+
+  await page.getByRole('button', { name: 'Pause replay' }).click();
+  await page.getByLabel('Action step').fill('3');
+  await page.getByRole('button', { name: /View Hydrapple ex/ }).click();
+
+  const slotViewer = page.getByRole('region', { name: /Bench 1/ });
+  await expect(slotViewer).toBeVisible();
+  await expect(slotViewer.getByText('1 card')).toBeVisible();
+  await expect(slotViewer.getByRole('img', { name: 'Hydrapple ex' })).toBeVisible();
+
+  await page.getByLabel('Action step').fill('2');
+  await expect(slotViewer.getByText('0 cards')).toBeVisible();
+  await expect(slotViewer.getByText('Empty')).toBeVisible();
+});
+
+test('Opponent discard visible card opens the full discard viewer', async ({ page }) => {
+  await routeApi(page);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Replay details' }).click();
+  await page.getByLabel('State index').fill('38');
+
+  const discardPile = page.getByTestId('discard-pile-1');
+  await expect(discardPile).toHaveAttribute('aria-label', 'Leundai discard pile, 12 cards');
+  await discardPile.getByRole('img', { name: 'Carmine' }).click();
+
+  const zoneViewer = page.getByRole('region', { name: 'Leundai discard' });
+  await expect(zoneViewer).toBeVisible();
+  await expect(zoneViewer.getByText('12 cards')).toBeVisible();
+  await expect(zoneViewer.getByRole('img', { name: 'Basic Fighting Energy' }).first()).toBeVisible();
+  await expect(zoneViewer.getByRole('img', { name: 'Dusk Ball' }).first()).toBeVisible();
+  await expect(zoneViewer.getByRole('img', { name: 'Carmine' })).toBeVisible();
+});
+
+async function inspectBoardContainment(page: Page) {
+  return page.evaluate(() => {
+    const plane = document.querySelector('.game-board-plane')?.getBoundingClientRect();
+    if (!plane) {
+      return ['missing game board plane'];
+    }
+    const specs = [
+      { selector: '.game-board-plane .board-slot', minWidth: 24, minHeight: 32 },
+      { selector: '.game-board-plane .stack-pile', minWidth: 18, minHeight: 18 },
+      { selector: '.game-board-plane .prize-card', minWidth: 12, minHeight: 16 },
+    ];
+    return specs.flatMap(({ selector, minWidth, minHeight }) =>
+      [...document.querySelectorAll(selector)].flatMap((node) => {
+        const rect = node.getBoundingClientRect();
+        if (rect.width < minWidth || rect.height < minHeight) {
+          return [`${selector} collapsed ${Math.round(rect.width)}x${Math.round(rect.height)}`];
+        }
+        const tolerance = 8;
+        const outside =
+          rect.left < plane.left - tolerance ||
+          rect.right > plane.right + tolerance ||
+          rect.top < plane.top - tolerance ||
+          rect.bottom > plane.bottom + tolerance;
+        return outside ? [`${selector} ${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.right)},${Math.round(rect.bottom)}`] : [];
+      }),
+    );
+  });
+}
+
+test('Board pieces stay inside the playmat on constrained viewports', async ({ page }) => {
+  await routeApi(page);
+
+  for (const viewport of [
+    { width: 1000, height: 620 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto('/?replayId=upload-cabt-match');
+    await page.getByRole('button', { name: 'Pause replay' }).click();
+    await page.getByLabel('Action step').fill('6');
+    await expect(page.locator('.game-board-plane')).toBeVisible();
+
+    const overflow = await inspectBoardContainment(page);
+    expect(overflow, `${viewport.width}x${viewport.height}`).toEqual([]);
+  }
 });
 
 test('Downloaded JSON can be imported and appears in the saved replay library', async ({ page }) => {
@@ -378,6 +529,9 @@ test('Cached leaderboard is visible without exposing admin controls', async ({ p
   await expect(page.getByText('TrustHub hiroingk', { exact: true })).toBeVisible();
   await expect(page.getByText('1307.9').first()).toBeVisible();
   await expect(page.getByText('Submission #111')).toBeVisible();
+  await expect(page.getByText('Submission #110')).toBeVisible();
+  await expect(page.getByText('2 submissions - 4 replays')).toBeVisible();
+  await expect(page.getByText(/Leaderboard run - Score 1307\.9/)).toBeVisible();
   const replaySummary = page.locator('summary').filter({ hasText: '3 replays' });
   await expect(replaySummary).toBeVisible();
   await replaySummary.click();

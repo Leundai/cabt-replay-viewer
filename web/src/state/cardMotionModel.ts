@@ -134,6 +134,7 @@ function findCardById(player: PlayerView, cardId: number): CardView | null {
     ...player.discard,
     ...player.lostZone,
     ...player.stadium,
+    ...player.prizes.cards,
   ];
   for (const slot of [player.active, ...player.bench]) {
     if (slot?.pokemon) flat.push(slot.pokemon);
@@ -280,11 +281,11 @@ export function deriveMotionIntents(
 function derivePrizeTravels(prevView: GameView | null, nextView: GameView): TravelIntent[] {
   const travels: TravelIntent[] = [];
   nextView.players.forEach((nextPlayer, owner) => {
-    const next = nextPlayer.prizesLeft;
+    const next = nextPlayer.prizes?.remaining;
     if (typeof next !== 'number') {
       return;
     }
-    const prev = prevView?.players[owner]?.prizesLeft;
+    const prev = prevView?.players[owner]?.prizes?.remaining;
     const prevCount = typeof prev === 'number' ? prev : 0;
     if (prevCount <= 0 && next > 0) {
       // Prizes appeared: deal them out from the deck onto the grid (they STAY).

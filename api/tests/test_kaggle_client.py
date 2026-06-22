@@ -102,7 +102,7 @@ async def test_kaggle_leaderboard_response_shape_is_supported(monkeypatch):
         assert payload["pageSize"] == 2
         return {
             "submissions": [
-                {"teamId": 10, "teamName": "Alpha", "submissionDate": "2026-06-20T12:00:00Z", "score": "42.0"},
+                {"ref": 1001, "teamId": 10, "teamName": "Alpha", "submissionDate": "2026-06-20T12:00:00Z", "score": "42.0"},
                 {"teamId": 20, "teamName": "Beta", "score": "40.5"},
             ],
             "nextPageToken": "next",
@@ -114,6 +114,7 @@ async def test_kaggle_leaderboard_response_shape_is_supported(monkeypatch):
 
     assert [entry.rank for entry in entries] == [1, 2]
     assert entries[0].teamId == 10
+    assert entries[0].submissionId == 1001
     assert entries[0].teamName == "Alpha"
     assert next_page_token == "next"
 

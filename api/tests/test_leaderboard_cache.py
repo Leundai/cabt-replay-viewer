@@ -25,6 +25,21 @@ def test_leaderboard_cache_round_trips_fresh_snapshot(tmp_path):
     assert loaded.nextPageToken == "next"
 
 
+def test_leaderboard_cache_survives_cache_object_recreation(tmp_path):
+    cache = LeaderboardCache(tmp_path, ttl_seconds=1800)
+    cache.save(
+        "pokemon-tcg-ai-battle",
+        [KaggleLeaderboardEntry(rank=1, teamId=123, teamName="Alpha", score="100.0")],
+        page_size=50,
+    )
+
+    restarted_cache = LeaderboardCache(tmp_path, ttl_seconds=1800)
+    loaded = restarted_cache.get("pokemon-tcg-ai-battle")
+
+    assert loaded.entries[0].teamName == "Alpha"
+    assert loaded.source == "cache"
+
+
 def test_leaderboard_cache_marks_expired_snapshot_stale(tmp_path):
     cache = LeaderboardCache(tmp_path, ttl_seconds=1800)
     snapshot = cache.save(

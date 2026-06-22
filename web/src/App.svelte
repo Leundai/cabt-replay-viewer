@@ -13,8 +13,9 @@
   import ReplayTimeline from './lib/components/ReplayTimeline.svelte';
   import TableShell from './lib/components/TableShell.svelte';
   import ZoneViewer from './lib/components/ZoneViewer.svelte';
+  import { canInspectSlot, slotSelectionFor } from './lib/game/slotInspection';
   import type { ZoneName } from './state/zoneViewer.svelte';
-  import type { GameView } from './lib/game/types';
+  import type { GameView, PlayerView, PokemonSlotView } from './lib/game/types';
   import type { ReplaySnapshot } from './lib/game/replay';
   import { cardInspectorStore } from './state/cardInspector.svelte';
   import { cardMotionStore } from './state/cardMotion.svelte';
@@ -33,6 +34,7 @@
   let currentStadiumOwner = $derived(game?.players.find((player) => player.stadium.length));
   let activePlayer = $derived(game?.players[game.activePlayerIndex]);
   let viewedCards = $derived(zoneViewerStore.cardsFor(game));
+  let zoneViewerTitle = $derived(zoneViewerStore.titleFor(game));
   let zoneViewerIsStadium = $derived(zoneViewerStore.zone === 'stadium');
   let statusLabel = $derived(replayStore.loading ? 'Loading replay' : replayStore.error);
   let replayMatchupLabel = $derived(formatReplayMatchup(replay));
@@ -141,6 +143,13 @@
     zoneViewerStore.show(playerIndex, zone, title, faceDown);
   }
 
+  function showSlot(player: PlayerView, slot: PokemonSlotView) {
+    if (!canInspectSlot(slot)) {
+      return;
+    }
+    zoneViewerStore.showSlot(slotSelectionFor(player, slot));
+  }
+
   async function closeReplay() {
     cardInspectorStore.close();
     zoneViewerStore.close();
@@ -154,9 +163,9 @@
   }
 
   // --- Cinema HUD auto-hide ---------------------------------------------------
-  // The chrome (status chip, settings gear, transport dock + caption) dims away
-  // during uninterrupted playback so the board owns the screen, and returns on
-  // any pointer/key activity, on pause, or whenever the settings menu is open.
+  // Secondary controls dim away during uninterrupted playback so the board owns
+  // the screen. The matchup chip and current action caption stay visible to keep
+  // replay context anchored while the rest of the HUD rests.
   let chromeResting = $state(false);
   let settingsOpen = $state(false);
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -283,6 +292,7 @@
             {currentStadium}
             {currentStadiumOwner}
             {showZone}
+            {showSlot}
             boardTilt={viewSettingsStore.boardTilt}
             boardPerspective={viewSettingsStore.boardPerspective}
             boardScaleY={viewSettingsStore.boardScaleY}
@@ -302,7 +312,7 @@
 
           <ZoneViewer
             open={zoneViewerStore.open}
-            title={zoneViewerStore.title}
+            title={zoneViewerTitle}
             cards={viewedCards}
             faceDown={zoneViewerStore.faceDown}
             actionLabel={zoneViewerIsStadium && viewedCards.length ? 'Inspect stadium' : ''}
@@ -361,10 +371,11 @@
     height: 100%;
     position: relative;
     overflow: auto;
+    container-type: size;
   }
 
   .viewer-stage :global(.table-shell) {
-    width: max(100%, var(--min-table-width));
+    width: 100%;
   }
 
   /* Cinema HUD: a single settings gear at top-right. Everything that used to be
@@ -463,13 +474,20 @@
     border-color: var(--danger-border);
   }
 
-  /* Resting state: dim the chrome away during playback. Pointer-events drop so
+  /* Resting state: dim secondary chrome during playback. Pointer-events drop so
      the board underneath stays fully interactive; any move re-wakes it. */
-  .viewer-stage.chrome-resting :global(.game-status),
   .viewer-stage.chrome-resting .hud-settings,
-  .viewer-stage.chrome-resting :global(.replay-dock),
-  .viewer-stage.chrome-resting :global(.replay-caption) {
+  .viewer-stage.chrome-resting :global(.replay-controls),
+  .viewer-stage.chrome-resting :global(.replay-details) {
     opacity: 0;
+    pointer-events: none;
+  }
+
+  .viewer-stage.chrome-resting :global(.replay-dock) {
+    border-top-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
     pointer-events: none;
   }
 
@@ -478,11 +496,18 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .viewer-stage.chrome-resting :global(.game-status),
     .viewer-stage.chrome-resting .hud-settings,
-    .viewer-stage.chrome-resting :global(.replay-dock),
-    .viewer-stage.chrome-resting :global(.replay-caption) {
+    .viewer-stage.chrome-resting :global(.replay-controls),
+    .viewer-stage.chrome-resting :global(.replay-details) {
       opacity: 1;
+      pointer-events: auto;
+    }
+
+    .viewer-stage.chrome-resting :global(.replay-dock) {
+      border-top-color: var(--surface-toolbar-border);
+      background: var(--surface-toolbar-bg);
+      box-shadow: var(--surface-toolbar-shadow);
+      backdrop-filter: blur(var(--backdrop-blur));
       pointer-events: auto;
     }
   }

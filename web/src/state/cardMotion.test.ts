@@ -6,6 +6,7 @@ import {
   planEligibility,
   type RawLog,
 } from './cardMotionModel';
+import { prizeZone } from '../lib/game/prizeZone';
 import { replayMotionBudgetMs } from './replayPlaybackModel';
 
 function card(id: number, name = `Card ${id}`, overrides: Partial<CardView> = {}): CardView {
@@ -40,11 +41,16 @@ function player(index: number, overrides: Partial<PlayerView> = {}): PlayerView 
     lostZone: [],
     stadium: [],
     playZone: [],
-    prizesLeft: 6,
+    prizes: prizeZone(Array.from({ length: 6 }, () => card(900, 'Prize')), true),
     active: slot(index, 'active', 0, card(100 + index, `Active ${index}`)),
     bench: [slot(index, 'bench', 0), slot(index, 'bench', 1)],
     ...overrides,
   };
+}
+
+// Build a prize zone with a given remaining count (remaining === cards.length).
+function prizesN(n: number): PlayerView['prizes'] {
+  return prizeZone(Array.from({ length: n }, () => card(900, 'Prize')), false);
 }
 
 function view(players: PlayerView[], logs: RawLog[]): GameView {
@@ -197,31 +203,31 @@ describe('deriveMotionIntents', () => {
   });
 
   it('derives a setup prize intent when prizes first appear (0/unknown -> m)', () => {
-    const prev = view([player(0, { prizesLeft: 0 }), player(1, { prizesLeft: 0 })], []);
-    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
+    const prev = view([player(0, { prizes: prizesN(0) }), player(1, { prizes: prizesN(0) })], []);
+    const next = view([player(0, { prizes: prizesN(6) }), player(1, { prizes: prizesN(6) })], []);
     const prizes = deriveMotionIntents(prev, next, []).travels.filter((t) => t.kind === 'prize');
     expect(prizes).toHaveLength(2);
     expect(prizes[0]).toMatchObject({ kind: 'prize', ownerIndex: 0, count: 6, mode: 'setup' });
   });
 
   it('derives a setup prize intent against a null previous view', () => {
-    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
+    const next = view([player(0, { prizes: prizesN(6) }), player(1, { prizes: prizesN(6) })], []);
     const prizes = deriveMotionIntents(null, next, []).travels.filter((t) => t.kind === 'prize');
     expect(prizes).toHaveLength(2);
     expect(prizes.every((p) => p.kind === 'prize' && p.mode === 'setup')).toBe(true);
   });
 
   it('derives a take prize intent with the claimed count when prizesLeft drops', () => {
-    const prev = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 4 })], []);
-    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 2 })], []);
+    const prev = view([player(0, { prizes: prizesN(6) }), player(1, { prizes: prizesN(4) })], []);
+    const next = view([player(0, { prizes: prizesN(6) }), player(1, { prizes: prizesN(2) })], []);
     const prizes = deriveMotionIntents(prev, next, []).travels.filter((t) => t.kind === 'prize');
     expect(prizes).toHaveLength(1);
     expect(prizes[0]).toMatchObject({ kind: 'prize', ownerIndex: 1, count: 2, mode: 'take' });
   });
 
   it('emits no prize intent when prizesLeft is unchanged', () => {
-    const prev = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
-    const next = view([player(0, { prizesLeft: 6 }), player(1, { prizesLeft: 6 })], []);
+    const prev = view([player(0, { prizes: prizesN(6) }), player(1, { prizes: prizesN(6) })], []);
+    const next = view([player(0, { prizes: prizesN(6) }), player(1, { prizes: prizesN(6) })], []);
     const prizes = deriveMotionIntents(prev, next, []).travels.filter((t) => t.kind === 'prize');
     expect(prizes).toHaveLength(0);
   });

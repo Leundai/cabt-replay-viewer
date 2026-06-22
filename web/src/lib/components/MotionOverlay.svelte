@@ -483,14 +483,14 @@
    *  from the grid box so the flight still lands sensibly if a cell isn't painted
    *  (e.g. the take case, where the claimed cell is already gone from the DOM). */
   function prizeCellBoxes(owner: number, overlay: DOMRect): Box[] {
-    const grid = document.querySelector(`[data-testid="prize-grid-${owner}"]`);
+    const grid = document.querySelector(`[data-testid="prize-stack-${owner}"] .prize-grid`);
     if (!grid) {
       return [];
     }
     const gridBox = localBox(grid.getBoundingClientRect(), overlay);
     const boxes: Box[] = [];
     for (let i = 0; i < 6; i += 1) {
-      const cell = boxFor(`[data-testid="prize-${owner}-${i}"]`, overlay);
+      const cell = boxFor(`[data-testid="prize-card-${owner}-${i}"]`, overlay);
       if (cell) {
         boxes.push(cell);
         continue;
@@ -514,7 +514,7 @@
     // TAKE the claimed cells are already gone, so cells can be []; derive a sane
     // card size from the grid box (63:88 aspect) so the loop still runs and every
     // suppressed hand card gets released on landing.
-    const gridBox = boxFor(`[data-testid="prize-grid-${intent.ownerIndex}"]`, overlay);
+    const gridBox = boxFor(`[data-testid="prize-stack-${intent.ownerIndex}"] .prize-grid`, overlay);
     const cellW = cells[0]?.w ?? (gridBox ? gridBox.w / 2 : 56);
     const cellH = cells[0]?.h ?? cellW * (88 / 63);
     const cardW = Math.max(28, cellW);

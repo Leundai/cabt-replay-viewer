@@ -4,6 +4,7 @@ import asyncio
 import hmac
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from json import JSONDecodeError
 from typing import Any
 
@@ -20,6 +21,7 @@ from .models import (
     KaggleEpisode,
     KaggleLeaderboardEntry,
     KaggleLeaderboardSnapshot,
+    KaggleSubmission,
     KaggleStatus,
 )
 from .replay_store import ReplayStore
@@ -35,6 +37,7 @@ kaggle = KaggleClient(
 )
 leaderboard_cache = LeaderboardCache(settings.data_dir, ttl_seconds=settings.kaggle_leaderboard_cache_seconds)
 leaderboard_refresh_lock = asyncio.Lock()
+leaderboard_refresh_tasks: dict[str, asyncio.Task[None]] = {}
 
 app = FastAPI(title="CABT Replay Viewer API")
 app.add_middleware(
@@ -155,12 +158,14 @@ async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry, limiter: Kaggl
         return entry
 
     enriched_submissions = []
-    for submission in submissions[: settings.kaggle_leaderboard_submissions_per_team]:
-        updates: dict[str, object] = {}
-        if submission.teamId is None:
-            updates["teamId"] = entry.teamId
-        if not submission.teamName:
-            updates["teamName"] = entry.teamName
+    selected_submissions = select_leaderboard_submissions(
+        entry,
+        submissions,
+        settings.kaggle_leaderboard_submissions_per_team,
+    )
+    ranked_submission_id = leaderboard_submission_id(entry, selected_submissions)
+    for submission in selected_submissions:
+        updates = leaderboard_submission_updates(entry, submission, ranked_submission_id)
 
         episodes = await safe_list_submission_episodes(submission.id, limiter)
         if episodes:
@@ -168,7 +173,118 @@ async def enrich_leaderboard_entry(entry: KaggleLeaderboardEntry, limiter: Kaggl
 
         enriched_submissions.append(submission.model_copy(update=updates) if updates else submission)
 
-    return entry.model_copy(update={"submissions": enriched_submissions})
+    entry_updates: dict[str, object] = {"submissions": enriched_submissions}
+    if entry.submissionId is None and ranked_submission_id is not None:
+        entry_updates["submissionId"] = ranked_submission_id
+    return entry.model_copy(update=entry_updates)
+
+
+def select_leaderboard_submissions(
+    entry: KaggleLeaderboardEntry,
+    submissions: list[KaggleSubmission],
+    limit: int,
+) -> list[KaggleSubmission]:
+    if limit <= 0:
+        return []
+    ranked = sorted(
+        enumerate(submissions),
+        key=lambda item: leaderboard_submission_sort_key(entry, item[1], item[0]),
+    )
+    return [submission for _index, submission in ranked[:limit]]
+
+
+def leaderboard_submission_id(
+    entry: KaggleLeaderboardEntry,
+    submissions: list[KaggleSubmission],
+) -> int | None:
+    for submission in submissions:
+        if entry.submissionId is not None and submission.id == entry.submissionId:
+            return submission.id
+    for submission in submissions:
+        if leaderboard_submission_candidate(entry, submission):
+            return submission.id
+    return None
+
+
+def leaderboard_submission_sort_key(
+    entry: KaggleLeaderboardEntry,
+    submission: KaggleSubmission,
+    index: int,
+) -> tuple[int, int, int, int]:
+    exact_id_miss = 0 if entry.submissionId is not None and submission.id == entry.submissionId else 1
+    date_miss = 0 if datetimes_match(entry.submissionDate, submission.date) else 1
+    score_miss = 0 if decimal_values_match(entry.score, submission.score) else 1
+    return exact_id_miss, date_miss, score_miss, index
+
+
+def leaderboard_submission_updates(
+    entry: KaggleLeaderboardEntry,
+    submission: KaggleSubmission,
+    ranked_submission_id: int | None,
+) -> dict[str, object]:
+    updates: dict[str, object] = {}
+    if submission.teamId is None:
+        updates["teamId"] = entry.teamId
+    if not submission.teamName:
+        updates["teamName"] = entry.teamName
+    if submission.id == ranked_submission_id:
+        if entry.score is not None:
+            updates["score"] = entry.score
+        if entry.submissionDate:
+            updates["date"] = entry.submissionDate
+    return updates
+
+
+def leaderboard_submission_candidate(entry: KaggleLeaderboardEntry, submission: KaggleSubmission) -> bool:
+    return datetimes_match(entry.submissionDate, submission.date) or decimal_values_match(entry.score, submission.score)
+
+
+def datetimes_match(left: str | None, right: str | None) -> bool:
+    left_time = parse_kaggle_datetime(left)
+    right_time = parse_kaggle_datetime(right)
+    if left_time is None or right_time is None:
+        return False
+    return abs((left_time - right_time).total_seconds()) < 1
+
+
+def parse_kaggle_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    if "." in normalized:
+        prefix, suffix = normalized.split(".", 1)
+        fraction = suffix
+        offset = ""
+        for marker in ("+", "-"):
+            if marker in suffix:
+                fraction, offset = suffix.split(marker, 1)
+                offset = f"{marker}{offset}"
+                break
+        normalized = f"{prefix}.{fraction[:6].ljust(6, '0')}{offset}"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def decimal_values_match(left: str | float | int | None, right: str | float | int | None) -> bool:
+    left_decimal = parse_decimal(left)
+    right_decimal = parse_decimal(right)
+    return left_decimal is not None and right_decimal is not None and left_decimal == right_decimal
+
+
+def parse_decimal(value: str | float | int | None) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
 
 
 async def safe_list_submission_episodes(submission_id: int, limiter: KaggleRefreshLimiter) -> list[KaggleEpisode]:
@@ -229,6 +345,37 @@ async def get_leaderboard_snapshot(competition: str, *, refresh_if_stale: bool, 
                 source="kaggle",
                 message="Leaderboard refreshed from Kaggle, but the cache could not be saved.",
             )
+
+
+def schedule_leaderboard_refresh(competition: str) -> bool:
+    if not settings.kaggle_credentials.configured:
+        return False
+
+    running_task = leaderboard_refresh_tasks.get(competition)
+    if running_task and not running_task.done():
+        return True
+
+    task = asyncio.create_task(refresh_leaderboard_cache_in_background(competition))
+    leaderboard_refresh_tasks[competition] = task
+
+    def remove_finished_task(done_task: asyncio.Task[None]) -> None:
+        if leaderboard_refresh_tasks.get(competition) is done_task:
+            leaderboard_refresh_tasks.pop(competition, None)
+
+    task.add_done_callback(remove_finished_task)
+    return True
+
+
+async def refresh_leaderboard_cache_in_background(competition: str) -> None:
+    try:
+        await get_leaderboard_snapshot(competition, refresh_if_stale=True, force=True)
+    except Exception:
+        # The next public read or admin refresh can retry; stale cache stays usable.
+        return
+
+
+def pending_leaderboard_refresh_snapshot(snapshot: KaggleLeaderboardSnapshot) -> KaggleLeaderboardSnapshot:
+    return stale_leaderboard_snapshot(snapshot, "Leaderboard cache is stale; refresh is running in the background.")
 
 
 def stale_leaderboard_snapshot(snapshot: KaggleLeaderboardSnapshot, message: str) -> KaggleLeaderboardSnapshot:
@@ -329,9 +476,17 @@ def kaggle_status() -> KaggleStatus:
 @app.get("/api/kaggle/leaderboard", response_model=KaggleLeaderboardSnapshot)
 async def kaggle_leaderboard(
     competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
-    refresh: bool = Query(True),
+    refresh: bool = Query(False),
 ) -> KaggleLeaderboardSnapshot:
-    return await get_leaderboard_snapshot(competition, refresh_if_stale=refresh)
+    if not refresh:
+        return await get_leaderboard_snapshot(competition, refresh_if_stale=False)
+
+    snapshot = leaderboard_cache.get(competition)
+    if not snapshot.stale:
+        return snapshot
+    if schedule_leaderboard_refresh(competition):
+        return pending_leaderboard_refresh_snapshot(snapshot)
+    return snapshot.model_copy(update={"message": "Kaggle credentials are not configured; showing cached leaderboard only."})
 
 
 @app.post("/api/kaggle/leaderboard/refresh", response_model=KaggleLeaderboardSnapshot, dependencies=[Depends(require_admin)])
@@ -364,7 +519,7 @@ async def import_cached_leaderboard_episode(
     episode_id: int,
     competition: str = Query(settings.kaggle_default_competition, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"),
 ) -> dict[str, object]:
-    snapshot = await get_leaderboard_snapshot(competition, refresh_if_stale=True)
+    snapshot = await get_leaderboard_snapshot(competition, refresh_if_stale=False)
     submission_id = find_cached_leaderboard_submission(snapshot, episode_id)
     if submission_id is None:
         raise HTTPException(status_code=404, detail="Episode is not available in the cached leaderboard.")
