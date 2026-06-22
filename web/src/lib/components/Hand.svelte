@@ -104,7 +104,7 @@
         card={item.card}
         compact
         disabled={disabled}
-        faceDown
+        faceDown={false}
         testId={`hand-card-${player.index}-${index}`}
       />
     {/each}
@@ -250,7 +250,11 @@
   }
 
   :global(.player-panel.top) .hand.concealed :global(.card-tile) {
-    width: var(--card-w);
+    width: calc(var(--card-w) * 0.84);
+    /* The opponent hand is shown FACE-UP (full-information replay), so spread the
+       cards with only a light overlap instead of the facedown fan's heavy stack —
+       the faces need to be readable. */
+    margin-right: calc(var(--card-w) * -0.12);
     transform: none;
   }
 
