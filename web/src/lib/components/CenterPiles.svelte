@@ -1,5 +1,6 @@
 <script lang="ts">
   import CardTile from './CardTile.svelte';
+  import { visiblePrizeSlots } from '../game/prizeZone';
   import type { PlayerView } from '../game/types';
 
   type Props = {
@@ -65,9 +66,11 @@
       </button>
       <div class="prize-stack" title={`${topPlayer.name} prizes`} aria-label={`${topPlayer.name} prizes`} data-testid={`prize-stack-${topPlayer.index}`}>
         <div class="prize-grid">
-          {#each topPlayer.prizes.cards as prizeCard, index}
+          {#each visiblePrizeSlots(topPlayer.prizes) as index}
             <div class="prize-card" data-testid={`prize-card-${topPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}>
-              <CardTile card={prizeCard} compact faceDown={prizeCard.id == null} inspectable={false} />
+              {#if topPlayer.prizes.cards[index]}
+                <CardTile card={topPlayer.prizes.cards[index]} compact faceDown={topPlayer.prizes.cards[index].id == null} inspectable={false} />
+              {/if}
             </div>
           {/each}
         </div>
@@ -122,9 +125,11 @@
       </button>
       <div class="prize-stack" title={`${bottomPlayer.name} prizes`} aria-label={`${bottomPlayer.name} prizes`} data-testid={`prize-stack-${bottomPlayer.index}`}>
         <div class="prize-grid">
-          {#each bottomPlayer.prizes.cards as prizeCard, index}
+          {#each visiblePrizeSlots(bottomPlayer.prizes) as index}
             <div class="prize-card" data-testid={`prize-card-${bottomPlayer.index}-${index}`} style={`--row: ${Math.floor(index / 2)}; --col: ${index % 2};`}>
-              <CardTile card={prizeCard} compact faceDown={prizeCard.id == null} inspectable={false} />
+              {#if bottomPlayer.prizes.cards[index]}
+                <CardTile card={bottomPlayer.prizes.cards[index]} compact faceDown={bottomPlayer.prizes.cards[index].id == null} inspectable={false} />
+              {/if}
             </div>
           {/each}
         </div>
