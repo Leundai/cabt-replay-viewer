@@ -2,23 +2,54 @@
 
 Public replay viewer for the Kaggle Pokemon TCG AI Battle CABT environment.
 
+Official viewer: [ptcg.leofrias.com](https://ptcg.leofrias.com)
+
 This repo is intentionally focused on viewing and searching replays. It does
 not include private agents, sample submissions, training code, or local battle
 runner logic.
 
 ![CABT Replay Viewer preview](web/public/preview.png)
 
-## What Is Included
+## What It Provides
 
-- Svelte replay viewer with timeline playback, side switching, pile viewers,
-  card inspection, and JSON drag/drop import.
-- FastAPI backend that keeps Kaggle credentials server-side.
+- Replay-first Svelte viewer for CABT and Kaggle Pokemon TCG AI Battle
+  episodes.
+- Production replay workspace with timeline playback, side switching, speed
+  controls, pile viewers, card inspection, and real card art.
+- Public leaderboard browser that exposes cached Kaggle standings, submissions,
+  and replay episode links without putting Kaggle credentials in the browser.
+- JSON drag/drop import for locally inspecting CABT runner or Kaggle episode
+  replay files.
+- FastAPI backend that keeps Kaggle credentials and replay imports server-side.
 - File-backed replay library for local and Railway deployments.
 - Direct Kaggle HTTP adapter for cached leaderboard pulls, submissions,
   episodes, and replay imports.
 - Dockerfile and `railway.json` for Railway deployment.
 
 The bundled demo replay is a public fixture for smoke testing the viewer.
+
+## Strengths
+
+- Accurate replay inspection: the viewer normalizes CABT replay states into a
+  board-first UI with visible active Pokemon, bench slots, prizes, decks,
+  discard/lost zones, hands, damage, attached energy, and turn status.
+- Fast replay navigation: the timeline supports first/previous/next/last jumps,
+  scrubber control, playback, and speed selection for reviewing long episodes.
+- Useful public discovery: the leaderboard panel links cached Kaggle standings
+  to available replay episodes, making interesting matches easy to find.
+- Safe operating model: public viewing and local JSON inspection are separate
+  from admin-only Kaggle imports, so credentials stay on the backend.
+- Deployment simplicity: the first persistence layer is file-backed and
+  volume-friendly while the backend interfaces leave room for Postgres, object
+  storage, and background queues later.
+
+## Inspiration
+
+This project was inspired by Charlie Lockyer's MIT-licensed
+[CABT Viewer](https://github.com/charlielockyer-rice/cabt-viewer), a Svelte
+viewer for CABT battle states and replays. This repo extracts the idea into a
+public, replay-focused service with a hosted leaderboard/replay workflow at
+[ptcg.leofrias.com](https://ptcg.leofrias.com).
 
 ## Architecture
 
@@ -157,5 +188,4 @@ python -m pytest
 
 ## License
 
-MIT. The viewer began from Charlie Lockyer's MIT-licensed CABT viewer work and
-has been extracted into this replay-focused public project.
+MIT.
