@@ -8,7 +8,7 @@ This repo is intentionally focused on viewing and searching replays. It does
 not include private agents, sample submissions, training code, or local battle
 runner logic.
 
-![CABT Replay Viewer preview](web/public/preview.png)
+![CABT Replay Viewer preview](web/public/preview.png?v=2026-06-23)
 
 ## What It Provides
 
