@@ -7,7 +7,7 @@ RUN npm ci
 COPY --chown=node:node web ./
 RUN npm run build
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 WORKDIR /app
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 COPY api/requirements.lock ./api/requirements.lock
